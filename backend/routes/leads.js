@@ -66,20 +66,31 @@ router.post('/', async (req, res) => {
 
     try {
         const { name, phone, loan_amount, estimated_savings, status, assigned_agent_id, referral_code } = req.body;
-        let agentId = assigned_agent_id;
+        let agentId = assigned_agent_id; // Direct assignment (if provided)
+        let referrerId = null; // To track the referrer for commissions
 
-        // Resolve agent via referral code
+        // Resolve agent and referrer via referral code
         if (referral_code) {
-            const agent = await Agent.findOne({ where: { referral_code } });
-            if (!agent) return sendError(res, 400, 'Invalid referral code');
-            agentId = agent.id;
+            const referrer = await Agent.findOne({ where: { referral_code } });
+
+            if (!referrer) {
+                return res.status(400).json({ error: 'Invalid referral code' });
+            }
+
+            referrerId = referrer.id; // Track the referrer
+            agentId = referrer.parent_referrer_id || referrer.id; // Assign to parent agent if exists, otherwise referrer
+            console.log(`[DEBUG] Referral code resolved: Referrer ID = ${referrerId}, Assigned Agent ID = ${agentId}`);
         }
 
         // Validate assigned agent
         if (agentId) {
-            if (!isUuid(agentId)) return sendError(res, 400, 'Invalid assigned_agent_id format');
-            const agent = await fetchEntityById(Agent, agentId, 'Agent', res);
-            if (!agent) return;
+            if (!isUuid(agentId)) {
+                return res.status(400).json({ error: 'Invalid assigned_agent_id format' });
+            }
+            const agent = await Agent.findByPk(agentId);
+            if (!agent) {
+                return res.status(404).json({ error: 'Assigned agent not found' });
+            }
         }
 
         // Validate and Create Lead
@@ -90,15 +101,18 @@ router.post('/', async (req, res) => {
             estimated_savings,
             status: status || 'New',
             assigned_agent_id: agentId,
+            referrer_id: referrerId, // Track the referrer for commissions
+            source: referrerId ? 'Referrer' : 'Direct', // Set source as 'Referrer' if referral code is used
         });
 
         console.log('[DEBUG] New Lead Created:', newLead);
         res.status(201).json(newLead);
     } catch (error) {
         console.error('[ERROR] Error creating lead:', error.message);
-        sendError(res, 500, 'Error creating lead', error.message);
+        res.status(500).json({ error: 'Error creating lead', details: error.message });
     }
 });
+
 
 // Route: Get Leads with Pagination and Filters
 router.get('/', async (req, res) => {
@@ -205,7 +219,7 @@ router.patch('/:id', async (req, res) => {
                 console.error('[ERROR] Agent not found:', agent_id);
                 return res.status(400).json({ error: 'Invalid agent ID' });
             }
-            lead.assigned_agent_id = agent_id;
+            lead.assigned_agent_id = agent_id; // Update assigned agent
             console.log(`[DEBUG] Agent ${agent_id} assigned to Lead ${id}`);
         }
 
@@ -238,6 +252,10 @@ router.patch('/:id', async (req, res) => {
             lead.status = newStatus;
         }
 
+        // Preserve referrer_id and source if they exist
+        lead.referrer_id = lead.referrer_id || null;
+        lead.source = lead.source || 'Direct';
+
         await lead.save();
         console.log(`[DEBUG] Lead ${id} updated successfully.`);
         res.status(200).json(lead);
@@ -246,6 +264,7 @@ router.patch('/:id', async (req, res) => {
         res.status(500).json({ error: 'Error updating lead', details: error.message });
     }
 });
+
 
 
 module.exports = router;

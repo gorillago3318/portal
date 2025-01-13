@@ -66,12 +66,22 @@ const Lead = sequelize.define(
         assigned_agent_id: {
             type: DataTypes.UUID,
             allowNull: true,
-            validate: {
-                isUUID: {
-                    args: 4,
-                    msg: 'Assigned agent ID must be a valid UUID',
-                },
+            references: {
+                model: 'Agents',
+                key: 'id',
             },
+        },
+        referrer_id: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: {
+                model: 'Agents',
+                key: 'id',
+            },
+        },
+        source: {
+            type: DataTypes.STRING,
+            defaultValue: 'Direct',
         },
     },
     {
