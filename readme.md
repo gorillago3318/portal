@@ -1,106 +1,210 @@
-# WhatsApp Bot Portal
+# Portal Backend API - Version 2.0
 
-## Overview
-This project is a backend portal for managing leads and agents, integrated with a WhatsApp chatbot for processing loan inquiries. The portal facilitates CRUD operations on agents and leads, supports agent assignments, lead status transitions, and more. It is designed with scalability in mind and follows a structured development plan divided into four phases.
+## **Overview**
+The Portal Backend API provides functionality to manage agents, referrers, leads, and their associated workflows. This API is designed for administrative, agent, and referrer operations to streamline loan application processes, agent and referrer registrations, and lead management.
 
-## Development Phases
+### **Current Version**
+- **Version:** 2.0
+- **Status:** Backend functionalities completed and tested for Phases 1 and 2.
 
-### Phase 1: Core Functionality
-**Objective**: Establish the foundational backend structure for managing leads and agents.
+---
 
-**Features**:
-- **CRUD operations for Agents**:
-  - Create an agent with unique phone validation
-  - View all agents
-  - Update agent details
-  - Soft delete agents with support for reassignments
+## **Features and Functions**
 
-- **CRUD operations for Leads**:
-  - Create a lead with optional agent assignment
-  - View all leads with filters (e.g., status, assigned agent, date ranges)
-  - Update lead details and status transitions with validations
-  - Support for agent reassignments
+### **1. Agent Management**
+- **Register New Agent (Self-Registration)**
+  - Endpoint: `POST /api/agents/register`
+  - Status: Default `Pending` until approved by Admin.
+  - Required Fields: `name`, `phone`, `email`, `location`
 
-- **Database setup**:
-  - Leads table with associations to Agents
-  - Hooks for auto-generating unique_id in leads
-  - Enum-based lead status transitions
-  - Error handling for invalid operations
-  - Logging for API operations and debugging
-  - Health-check endpoint to verify database connectivity
+- **Approve or Reject Agent**
+  - Endpoint: `PATCH /api/agents/:id/approval`
+  - Role Required: Admin
+  - Allowed Status Changes: `Pending` → `Active`, `Pending` → `Rejected`
 
-### Phase 2: WhatsApp Chatbot Integration
-**Objective**: Integrate WhatsApp chatbot functionality to handle user interactions and route queries to the backend.
+- **Activate or Deactivate Agent**
+  - Endpoint: `PATCH /api/agents/:id/status`
+  - Role Required: Admin
+  - Allowed Status Changes: `Active` ↔ `Inactive`
 
-**Features**:
-- Connect WhatsApp bot to the backend using the WhatsApp Web.js library
-- Handle user queries for:
-  - Loan assessments
-  - Existing lead status inquiries
-  - New lead creation via chatbot inputs
-- Ensure smooth API interaction between the chatbot and backend
+- **Update Agent Details**
+  - Endpoint: `PATCH /api/agents/:id`
+  - Role Required: Admin
+  - Fields: `name`, `phone`, `email`, `location`, `bank_name`, `account_number`
 
-### Phase 3: Enhanced User Interaction
-**Objective**: Improve the usability and engagement of the portal and bot.
+- **Get All Agents**
+  - Endpoint: `GET /api/agents`
 
-**Features**:
-- **Notifications**:
-  - Email/SMS notifications for lead updates and agent assignments
-  - WhatsApp message alerts for specific events (e.g., lead approval)
+- **Get Pending Agents**
+  - Endpoint: `GET /api/agents/pending`
 
-- **Advanced filtering and reporting**:
-  - Generate reports on lead conversions, agent performance, etc.
-  - Support for exportable formats (e.g., CSV)
+### **2. Referrer Management**
+- **Register New Referrer**
+  - Endpoint: `POST /api/agents/register-referrer`
+  - Role Required: Admin
+  - Required Fields: `name`, `phone`, `email`, `linked_agent_id`
 
-- **Admin dashboard**:
-  - Web-based interface for managing agents and leads
-  - Visualization of data (e.g., charts for loan statuses, agent performance)
+- **Update Referrer Details**
+  - Endpoint: `PATCH /api/agents/:id`
+  - Role Required: Admin
+  - Fields: `name`, `phone`, `email`, `bank_name`, `account_number`
 
-### Phase 4: AI & Analytics Integration
-**Objective**: Leverage AI and analytics to provide insights and automate tasks.
+- **View Linked Referrers**
+  - Endpoint: `GET /api/agents?role=Referrer`
 
-**Features**:
-- AI-driven lead scoring based on data patterns
-- Predictive analytics for loan approvals and estimated savings
-- Automated response generation for common user queries
-- Chatbot enhancements using AI models (e.g., OpenAI GPT) for a conversational experience
+### **3. Lead Management**
+- **Create New Lead**
+  - Endpoint: `POST /api/leads`
+  - Role Required: Admin or Agent (linked to referral code or directly assigned).
+  - Fields: `name`, `phone`, `loan_amount`, `estimated_savings`, `assigned_agent_id`, `referral_code`
 
-## Technology Stack
-- **Backend**: Node.js (Express)
-- **Database**: PostgreSQL (Sequelize ORM)
-- **Messaging**: WhatsApp Web.js
-- **Dev Tools**: Postman, pgAdmin, Git
-- **Deployment**: [Your chosen hosting platform]
+- **Get All Leads**
+  - Endpoint: `GET /api/leads`
+  - Filtering: By `status`, `agent_id`, `date range`
 
-## Setup Instructions
+- **Update Lead Status**
+  - Endpoint: `PATCH /api/leads/:id`
+  - Status Transitions:
+    - `New` → `Assigned`, `Contacted`
+    - `Contacted` → `Preparing Documents`
+    - `Preparing Documents` → `Submitted`
+    - `Submitted` → `Approved`, `Declined`, `KIV`
+    - `KIV` ↔ `Submitted`
+    - `Approved` ↔ `Declined`
+  - Role Required:
+    - Agent: Transitions for assigned leads.
+    - Admin: All transitions and reassignment.
 
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd <repository-folder>
+- **Reassign Lead**
+  - Admin can reassign a lead if no action is taken within 3 days.
+
+### **4. Notifications (Planned)**
+- Automated notifications for agents and referrers when:
+  - New leads are assigned.
+  - Leads remain uncontacted for 3 days.
+
+---
+
+## **How to Test the API**
+
+### **1. Setup**
+1. Clone the repository.
+2. Run `npm install` to install dependencies.
+3. Setup the `.env` file with the following variables:
    ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Set up the .env file**:
-   ```env
-   DATABASE_URL=your_postgresql_connection_string
+   DATABASE_URL=<Your PostgreSQL Connection String>
    PORT=5000
-   NODE_ENV=development
+   JWT_SECRET=<Your Secret Key>
+   ```
+4. Start the server:
+   ```
+   npm run dev
    ```
 
-4. **Run the application**:
-   ```bash
-   npm start
+### **2. Authentication**
+All requests must include an Authorization header:
+```
+Authorization: Bearer <your-test-token>
+```
+
+Use the following test tokens based on role:
+- **Admin:** `Bearer admin-token`
+- **Agent:** `Bearer agent-token`
+- **Referrer:** `Bearer referrer-token`
+
+### **3. Testing Endpoints**
+
+#### **Agent Management**
+1. **Register Agent**
+   ```
+   POST /api/agents/register
+   {
+     "name": "John Agent",
+     "phone": "01122334455",
+     "email": "john.agent@example.com",
+     "location": "Kuala Lumpur"
+   }
    ```
 
-5. **Access the API**:
-   - Health-check: `GET /health`
-   - Leads: `GET /api/leads`
-   - Agents: `GET /api/agents`
+2. **Approve Agent**
+   ```
+   PATCH /api/agents/:id/approval
+   {
+     "status": "Active"
+   }
+   ```
 
-## Future Enhancements
-Additional features and refinements will be implemented in subsequent phases as outlined above.
+3. **Update Agent**
+   ```
+   PATCH /api/agents/:id
+   {
+     "bank_name": "Public Bank",
+     "account_number": "1234567890"
+   }
+   ```
+
+#### **Referrer Management**
+1. **Register Referrer**
+   ```
+   POST /api/agents/register-referrer
+   {
+     "name": "Jane Referrer",
+     "phone": "01233445566",
+     "email": "jane.referrer@example.com",
+     "linked_agent_id": "<agent-id>"
+   }
+   ```
+
+#### **Lead Management**
+1. **Create Lead**
+   ```
+   POST /api/leads
+   {
+     "name": "Test Lead",
+     "phone": "0123456789",
+     "loan_amount": 100000,
+     "estimated_savings": 5000,
+     "referral_code": "REF-XXXXXXX"
+   }
+   ```
+
+2. **Update Lead Status**
+   ```
+   PATCH /api/leads/:id
+   {
+     "status": "Preparing Documents"
+   }
+   ```
+
+3. **Get All Leads**
+   ```
+   GET /api/leads?status=New&agent_id=<agent-id>&page=1&limit=10
+   ```
+
+---
+
+## **Future Plans**
+
+### **Phase 3: Portal Development**
+- Web-based portal for:
+  - Agent and referrer management.
+  - Lead tracking and status updates.
+  - Role-based dashboards.
+
+### **Phase 4: Automation**
+- Automated lead reassignment.
+- Integration with external APIs (e.g., WhatsApp for notifications).
+- Analytics and reporting.
+
+---
+
+## **Contributing**
+1. Fork the repository.
+2. Create a feature branch.
+3. Commit your changes and create a pull request.
+
+---
+
+## **License**
+This project is licensed under the MIT License.
+

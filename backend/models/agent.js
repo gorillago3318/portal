@@ -43,8 +43,40 @@ const Agent = sequelize.define(
             defaultValue: 'Unknown',
         },
         status: {
-            type: DataTypes.ENUM('Active', 'Inactive'),
-            defaultValue: 'Active',
+            type: DataTypes.ENUM('Active', 'Inactive', 'Pending', 'Rejected'), // Added 'Rejected' status
+            defaultValue: 'Pending',
+        },
+        referral_code: {
+            type: DataTypes.STRING,
+            allowNull: true, // Allow NULL for database-level flexibility
+            unique: true, // Ensure referral_code is unique
+        },
+        role: {
+            type: DataTypes.ENUM('Admin', 'Agent', 'Referrer'),
+            defaultValue: 'Agent',
+        },
+        parent_referrer_id: {
+            type: DataTypes.UUID,
+            allowNull: true,
+            references: {
+                model: 'Agents',
+                key: 'id',
+            },
+        },
+        bank_name: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            validate: {
+                len: [2, 100], // Ensure bank name is valid
+            },
+        },
+        account_number: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            validate: {
+                is: /^\d+$/, // Ensure account number contains only digits
+                len: [5, 30], // Reasonable length validation
+            },
         },
     },
     {
@@ -58,11 +90,19 @@ const Agent = sequelize.define(
             {
                 fields: ['status'], // Index for status
             },
+            {
+                fields: ['referral_code'], // Index for referral_code
+            },
         ],
         hooks: {
+            beforeCreate: async (agent) => {
+                if (!agent.referral_code) {
+                    agent.referral_code = `REF-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
+                }
+            },
             beforeUpdate: (agent) => {
-                if (agent.changed('status')) {
-                    console.log(`[INFO] Agent ID: ${agent.id}, Name: ${agent.name}, Status changed to: ${agent.status}`);
+                if (agent.changed('referral_code')) {
+                    throw new Error('Referral code cannot be updated.');
                 }
             },
         },

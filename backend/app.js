@@ -11,6 +11,9 @@ const Agent = require('./models/agent');
 const leadsRouter = require('./routes/leads');
 const agentsRouter = require('./routes/agents');
 
+// Import Middleware
+const { authMiddleware } = require('./middleware/authMiddleware');
+
 // Validate environment variables
 if (!process.env.DATABASE_URL) {
     console.error('[ERROR] Missing DATABASE_URL in environment variables');
@@ -19,15 +22,10 @@ if (!process.env.DATABASE_URL) {
 
 // Initialize Express app
 const app = express();
+app.use(bodyParser.json());
 
-// Middleware
-app.use((req, res, next) => {
-    if (req.method !== 'GET') {
-        bodyParser.json()(req, res, next);
-    } else {
-        next();
-    }
-});
+// Apply Global Middleware
+app.use(authMiddleware);
 
 // Set logging format
 const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
@@ -111,7 +109,10 @@ app.listen(PORT, async () => {
     if (process.env.NODE_ENV !== 'production') {
         try {
             console.log('[DEBUG] Syncing database...');
-            await Promise.all([Lead.sync({ alter: true }), Agent.sync({ alter: true })]);
+            await Promise.all([
+                Lead.sync({ alter: true }),
+                Agent.sync({ alter: true })
+            ]);
             console.log('[INFO] Database synced successfully.');
         } catch (error) {
             console.error('[ERROR] Error syncing database:', error.message);
