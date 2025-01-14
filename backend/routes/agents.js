@@ -1,7 +1,7 @@
 const express = require('express');
-const { checkRole } = require('../middleware/authMiddleware'); // Updated to match the middleware structure
+const { checkRole } = require('../middleware/authMiddleware'); // Middleware for role checking
 const router = express.Router();
-const Agent = require('../models/agent');
+const { Agent } = require('../models'); // Adjusted import for models
 
 // Helper function to send a response
 const sendResponse = (res, status, message, data = null, error = null) => {
@@ -10,32 +10,7 @@ const sendResponse = (res, status, message, data = null, error = null) => {
     res.status(status).json(response);
 };
 
-// Approve or Reject an Agent (Admin only)
-router.patch('/:id/approval', checkRole(['Admin']), async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (!['Active', 'Inactive'].includes(status)) {
-        return sendResponse(res, 400, 'Invalid status. Only "Active" or "Inactive" are allowed.');
-    }
-
-    try {
-        const agent = await Agent.findByPk(id);
-
-        if (!agent) return sendResponse(res, 404, 'Agent not found');
-        if (agent.status !== 'Pending') {
-            return sendResponse(res, 400, `Agent status must be "Pending" to approve or reject.`);
-        }
-
-        agent.status = status;
-        await agent.save();
-        sendResponse(res, 200, `Agent status updated to ${status}`, agent);
-    } catch (error) {
-        sendResponse(res, 500, 'Error updating agent status', null, error.message);
-    }
-});
-
-// Create a new agent (Admin or System Use)
+// Create a new agent (Admin)
 router.post('/', async (req, res) => {
     const { name, phone, email, location, status } = req.body;
 
@@ -52,7 +27,15 @@ router.post('/', async (req, res) => {
             return sendResponse(res, 400, msg);
         }
 
-        const newAgent = await Agent.create({ name, phone, email, location, status: status || 'Active' });
+        // Create the new agent with the default referral code generation handled by beforeCreate
+        const newAgent = await Agent.create({
+            name,
+            phone,
+            email,
+            location,
+            status: status || 'Active',  // Default to 'Active' if no status is provided
+        });
+
         sendResponse(res, 201, 'Agent created successfully', newAgent);
     } catch (error) {
         sendResponse(res, 500, 'Error creating agent', null, error.message);
@@ -61,21 +44,28 @@ router.post('/', async (req, res) => {
 
 // Self-Registration (Default Pending Status)
 router.post('/register', async (req, res) => {
-    const { name, phone, email, location, bank_name, account_number } = req.body;
+    const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
 
     try {
-        // Check if phone number is already in use
         const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
         if (existingAgent) {
-            return res.status(400).json({ error: 'Phone number already in use' });
+            return sendResponse(res, 400, 'Phone number already in use');
         }
 
-        // Validate required fields
         if (!bank_name || !account_number) {
-            return res.status(400).json({ error: 'Bank name and account number are required for registration' });
+            return sendResponse(res, 400, 'Bank name and account number are required for registration');
         }
 
-        // Create a new agent with default 'Pending' status
+        let parent_referrer_id = null;
+        if (referrer_code) {
+            // Find the agent using the referral code
+            const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
+            if (!referrer) {
+                return sendResponse(res, 404, 'Referrer not found');
+            }
+            parent_referrer_id = referrer.id;  // Set the referrer ID (parent_referrer_id)
+        }
+
         const newAgent = await Agent.create({
             name,
             phone,
@@ -83,62 +73,90 @@ router.post('/register', async (req, res) => {
             location,
             bank_name,
             account_number,
-            status: 'Pending',
+            status: 'Pending',  // Default status
+            parent_referrer_id,  // Link the agent to the referrer
         });
 
-        res.status(201).json({
-            message: 'Registration successful. Awaiting approval.',
-            agent: newAgent,
-        });
+        sendResponse(res, 201, 'Registration successful. Awaiting approval.', newAgent);
     } catch (error) {
-        res.status(500).json({
-            error: 'Error registering agent',
-            details: error.message,
-        });
+        sendResponse(res, 500, 'Error registering agent', null, error.message);
     }
 });
 
-
-router.post('/register-referrer', checkRole(['Admin']), async (req, res) => {
-    const { name, phone, email, linked_agent_id, bank_name, account_number } = req.body;
+// Register a Referrer (Agents Only)
+router.post('/register-referrer', async (req, res) => {
+    const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
 
     try {
-        // Validate linked agent existence
-        const linkedAgent = await Agent.findByPk(linked_agent_id);
-        if (!linkedAgent) {
-            return res.status(404).json({ error: 'Linked agent not found' });
+        // Find the agent using the referrer code
+        const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
+        if (!referrer) {
+            return sendResponse(res, 404, 'Referrer not found');
         }
 
-        // Validate phone number uniqueness
-        const existingReferrer = await Agent.findOne({ where: { phone }, paranoid: false });
-        if (existingReferrer) {
-            return res.status(400).json({ error: 'Phone number already in use' });
+        // Check if the phone number is already in use (soft-deleted agents included)
+        const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
+        if (existingAgent) {
+            return sendResponse(res, 400, 'Phone number already in use');
         }
 
-        // Validate required fields
         if (!bank_name || !account_number) {
-            return res.status(400).json({ error: 'Bank name and account number are required' });
+            return sendResponse(res, 400, 'Bank name and account number are required');
         }
 
-        // Create a new referrer
-        const referrer = await Agent.create({
+        // Create the referrer agent
+        const newReferrer = await Agent.create({
             name,
             phone,
             email,
-            role: 'Referrer',
-            parent_referrer_id: linked_agent_id,
+            location,
             bank_name,
             account_number,
-            status: 'Active',
+            role: 'Referrer',
+            parent_referrer_id: referrer.id,  // Link the referrer to the parent agent
+            status: 'Active',  // Default status for referrers is Active
         });
 
-        res.status(201).json({ message: 'Referrer registered successfully', referrer });
+        sendResponse(res, 201, 'Referrer registered successfully', newReferrer);
     } catch (error) {
-        res.status(500).json({ error: 'Error registering referrer', details: error.message });
+        sendResponse(res, 500, 'Error registering referrer', null, error.message);
     }
 });
 
-// Generate Referral Link for an Agent
+// Create a new lead and assign to the parent agent of the referrer
+router.post('/leads', async (req, res) => {
+    const { name, contact, referrer_code } = req.body;
+
+    try {
+        let parentAgentId = null;
+
+        if (referrer_code) {
+            // Find the referrer using the referral code
+            const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
+            if (!referrer) {
+                return sendResponse(res, 404, 'Referrer not found');
+            }
+            parentAgentId = referrer.parent_referrer_id;  // Get the parent agent of the referrer
+            if (!parentAgentId) {
+                return sendResponse(res, 404, 'Parent agent not found');
+            }
+        }
+
+        // Create the lead and assign to the parent agent of the referrer
+        const newLead = await Lead.create({
+            name,
+            contact,
+            referrer_code,  // Store the referrer_code
+            parent_agent_id: parentAgentId,  // Assign to the parent agent
+        });
+
+        sendResponse(res, 201, 'Lead created successfully', newLead);
+    } catch (error) {
+        sendResponse(res, 500, 'Error creating lead', null, error.message);
+    }
+});
+
+// Generate Referral Link
 router.get('/:id/referral-link', async (req, res) => {
     const { id } = req.params;
 
@@ -153,7 +171,7 @@ router.get('/:id/referral-link', async (req, res) => {
     }
 });
 
-// Get all agents
+// Fetch Agents
 router.get('/', async (req, res) => {
     try {
         const agents = await Agent.findAll();
@@ -173,94 +191,119 @@ router.get('/pending', async (req, res) => {
     }
 });
 
-// Approve or Reject an Agent (Admin only)
+// Approve/Reject Agent
 router.patch('/:id/approval', checkRole(['Admin']), async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body; // Expect "Active" or "Rejected"
+    const { status } = req.body;
+
+    // Validate allowed status changes: only 'Active' or 'Rejected' are allowed
+    if (!['Active', 'Rejected'].includes(status)) {
+        return sendResponse(res, 400, 'Invalid status. Allowed values are "Active" or "Rejected".');
+    }
 
     try {
-        if (!['Active', 'Rejected'].includes(status)) {
-            return res.status(400).json({ error: 'Invalid status. Allowed values are "Active" or "Rejected".' });
-        }
-
         const agent = await Agent.findByPk(id);
-        if (!agent) return res.status(404).json({ error: 'Agent not found' });
+        if (!agent) return sendResponse(res, 404, 'Agent not found');
 
+        // Only 'Pending' agents can be approved or rejected
         if (agent.status !== 'Pending') {
-            return res.status(400).json({ error: 'Agent must be in "Pending" status for approval or rejection.' });
+            return sendResponse(res, 400, 'Only "Pending" agents can be approved or rejected.');
         }
 
+        // Set the new status
         agent.status = status;
         await agent.save();
 
-        res.status(200).json({ message: `Agent status updated to: ${status}`, agent });
+        sendResponse(res, 200, `Agent status updated to: ${status}`, agent);
     } catch (error) {
-        res.status(500).json({ error: 'Error updating agent approval status', details: error.message });
+        sendResponse(res, 500, 'Error updating agent approval status', null, error.message);
     }
 });
 
-// Update Agent Operational Status (Admin Only)
+
+// Update Agent Status (Active <-> Inactive)
 router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body; // Expect "Active" or "Inactive"
+    const { status } = req.body;
+
+    // Validate allowed status changes
+    if (!['Active', 'Inactive'].includes(status)) {
+        return sendResponse(res, 400, 'Invalid status. Allowed values are "Active" or "Inactive".');
+    }
 
     try {
-        // Validate the provided status
-        if (!['Active', 'Inactive'].includes(status)) {
-            return res.status(400).json({
-                error: 'Invalid status. Allowed values are "Active" or "Inactive".',
-            });
-        }
-
         const agent = await Agent.findByPk(id);
-        if (!agent) {
-            return res.status(404).json({ error: 'Agent not found' });
+        if (!agent) return sendResponse(res, 404, 'Agent not found');
+
+        // If the status is already the same, return an error
+        if (agent.status === status) {
+            return sendResponse(res, 400, `Agent is already ${status}.`);
         }
 
-        if (!['Active', 'Inactive'].includes(agent.status)) {
-            return res.status(400).json({ error: 'Only agents with "Active" or "Inactive" status can change operational status.' });
+        // Only allow switching between Active/Inactive
+        if (['Active', 'Inactive'].includes(agent.status)) {
+            agent.status = status;  // Change to Active or Inactive
+        } else {
+            return sendResponse(res, 400, 'Status can only be updated between "Active" and "Inactive".');
         }
 
-        // Update the status
-        agent.status = status;
         await agent.save();
 
-        // Respond with success
-        res.status(200).json({
-            message: `Agent status updated to: ${status}`,
-            agent,
-        });
+        sendResponse(res, 200, `Agent status updated to: ${status}`, agent);
     } catch (error) {
-        console.error('[ERROR] Error updating agent status:', error.message);
-        res.status(500).json({
-            error: 'Error updating agent status',
-            details: error.message,
-        });
+        sendResponse(res, 500, 'Error updating agent status', null, error.message);
     }
 });
 
-// Update Agent Details (Admin and Agent Roles Allowed)
+
+// Deactivate Referrer (Admin only)
+router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Only allow 'Inactive' or 'Active' as valid status for referrers
+    if (!['Active', 'Inactive'].includes(status)) {
+        return sendResponse(res, 400, 'Invalid status. Allowed values are "Active" or "Inactive".');
+    }
+
+    try {
+        const referrer = await Agent.findByPk(id);
+        if (!referrer) {
+            return sendResponse(res, 404, 'Referrer not found');
+        }
+
+        // Ensure the agent is a referrer
+        if (referrer.role !== 'Referrer') {
+            return sendResponse(res, 400, 'Only referrers can have their status updated');
+        }
+
+        referrer.status = status;
+        await referrer.save();
+
+        sendResponse(res, 200, `Referrer status updated to: ${status}`, referrer);
+    } catch (error) {
+        sendResponse(res, 500, 'Error updating referrer status', null, error.message);
+    }
+});
+
+
+// Update Agent Details
 router.patch('/:id', checkRole(['Admin', 'Agent']), async (req, res) => {
     const { id } = req.params;
     const { name, phone, email, location, bank_name, account_number } = req.body;
 
     try {
-        // Find the agent by ID
         const agent = await Agent.findByPk(id);
-        if (!agent) {
-            return res.status(404).json({ error: 'Agent not found' });
-        }
+        if (!agent) return sendResponse(res, 404, 'Agent not found');
 
-        // Check for unique phone number if it's being updated
         if (phone && phone !== agent.phone) {
             const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
             if (existingAgent) {
-                return res.status(400).json({ error: 'Phone number already in use' });
+                return sendResponse(res, 400, 'Phone number already in use');
             }
         }
 
-        // Update only the fields provided in the request
-        agent.name = name ?? agent.name; // Preserve existing value if `name` is not provided
+        agent.name = name ?? agent.name;
         agent.phone = phone ?? agent.phone;
         agent.email = email ?? agent.email;
         agent.location = location ?? agent.location;
@@ -268,15 +311,11 @@ router.patch('/:id', checkRole(['Admin', 'Agent']), async (req, res) => {
         agent.account_number = account_number ?? agent.account_number;
 
         await agent.save();
-
-        res.status(200).json({ message: 'Agent details updated successfully', agent });
+        sendResponse(res, 200, 'Agent details updated successfully', agent);
     } catch (error) {
-        res.status(500).json({ error: 'Error updating agent details', details: error.message });
+        sendResponse(res, 500, 'Error updating agent details', null, error.message);
     }
 });
-
-
-
 
 // Delete an Agent
 router.delete('/:id', checkRole(['Admin']), async (req, res) => {

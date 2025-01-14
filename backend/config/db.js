@@ -6,33 +6,33 @@ if (!process.env.DATABASE_URL) {
     process.exit(1);
 }
 
-// Initialize Sequelize using connection URI from .env
+// Initialize Sequelize
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
     protocol: 'postgres',
     dialectOptions: {
         ssl: {
-            require: true,
-            rejectUnauthorized: false, // Allow SSL connection
+            require: true, // Enforce SSL for all connections
+            rejectUnauthorized: false, // Allow self-signed certificates
         },
     },
     pool: {
-        max: 10, // Maximum number of connections
-        min: 0,  // Minimum number of connections
-        acquire: 30000, // Maximum time (ms) to try getting a connection
-        idle: 10000, // Time (ms) before releasing an idle connection
+        max: 5, // Maximum number of connections
+        min: 0, // Minimum number of connections
+        acquire: 30000, // Maximum time (ms) to get a connection
+        idle: 10000, // Time (ms) a connection can remain idle before being released
     },
-    logging: process.env.NODE_ENV !== 'production', // Enable logging only in non-production environments
+    logging: console.log, // Optional: Enable logging for debugging
 });
 
 // Test Database Connection
 (async () => {
     try {
         await sequelize.authenticate();
-        console.log('Database connected...');
-    } catch (err) {
-        console.error('Error connecting to the database:', err);
-        process.exit(1); // Exit the application if the database connection fails
+        console.log('Database connected successfully with SSL.');
+    } catch (error) {
+        console.error('Unable to connect to the database:', error.message);
+        process.exit(1); // Exit the application if the connection fails
     }
 })();
 
