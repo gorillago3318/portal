@@ -1,25 +1,30 @@
-const { Sequelize, DataTypes } = require('sequelize');
-const sequelize = require('../config/db'); // Adjust path to match your project structure
+// models/index.js
+const sequelize = require('../config/db'); // This is your db.js from config
+const AgentClass = require('./agent');
+const LeadClass = require('./lead');
+const CommissionClass = require('./commissions');
 
-// Import models
-const Agent = require('./agent');
-const Lead = require('./lead');
-const Commission = require('./commissions');
+// 1) Initialize each model
+const Agent = AgentClass.initModel(sequelize);
+const Lead = LeadClass.initModel(sequelize);
+const Commission = CommissionClass.initModel(sequelize);
 
-// Initialize models
-Agent.initModel(sequelize, DataTypes);
-Lead.initModel(sequelize, DataTypes);
-Commission.initModel(sequelize, DataTypes);
+// 2) Put them in an object so we can .associate later
+const models = { Agent, Lead, Commission };
 
-// Define associations
-Lead.hasMany(Commission, { foreignKey: 'lead_id', onDelete: 'CASCADE' });
-Commission.belongsTo(Lead, { foreignKey: 'lead_id' });
+// 3) For each model, call .associate(models) if it exists
+Object.keys(models).forEach((modelName) => {
+  // modelName will be "Agent", "Lead", "Commission"
+  // e.g. models["Agent"] = Agent
+  if (typeof models[modelName].associate === 'function') {
+    models[modelName].associate(models);
+  }
+});
 
-Agent.hasMany(Commission, { foreignKey: 'agent_id', onDelete: 'CASCADE' });
-Commission.belongsTo(Agent, { foreignKey: 'agent_id' });
-
-Agent.hasMany(Commission, { foreignKey: 'referrer_id', onDelete: 'SET NULL' });
-Commission.belongsTo(Agent, { foreignKey: 'referrer_id' });
-
-// Export models and Sequelize instance
-module.exports = { sequelize, Agent, Lead, Commission };
+// 4) Export the models + sequelize
+module.exports = {
+  sequelize,
+  Agent,
+  Lead,
+  Commission,
+};

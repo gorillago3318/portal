@@ -1,237 +1,280 @@
+// routes/leads.js
+
 const express = require('express');
 const { Op } = require('sequelize');
 const { validate: isUuid } = require('uuid'); // UUID validation
 const router = express.Router();
-const { Lead, Agent, Commission } = require('../models'); // Import models
-const { calculateCommission } = require('../utils/commissionUtils'); // Import commission calculation utility
+
+const { Lead, Agent, Commission } = require('../models'); // Import from index.js
+const { calculateCommission } = require('../utils/commissionUtils'); // Adjust path if needed
 
 // Constants
 const MAX_LIMIT = 100;
-const allowedTransitions = {
-    New: ['Assigned', 'Contacted'],
-    Assigned: ['Contacted'],
-    Contacted: ['Preparing Documents'],
-    'Preparing Documents': ['Submitted'],
-    Submitted: ['Approved', 'Declined', 'KIV'],
-    Approved: ['Accepted', 'Declined', 'KIV'],
-    Declined: [],
-    KIV: ['Submitted'],
-    Accepted: [],
+
+/**
+ * Agent transitions up to "Submitted":
+ *  - New -> Assigned/Contacted/Preparing Documents/Submitted
+ *  - Assigned -> Contacted/Preparing Documents/Submitted
+ *  - Contacted -> Preparing Documents/Submitted
+ *  - Preparing Documents -> Submitted
+ *
+ * If Approved, agent can do -> Accepted/Rejected
+ * If KIV, agent can do -> Preparing Documents/Submitted
+ * If Declined/Accepted/Rejected, agent can't do anything more.
+ */
+const agentAllowedTransitions = {
+  New: ['Assigned', 'Contacted', 'Preparing Documents', 'Submitted'],
+  Assigned: ['Contacted', 'Preparing Documents', 'Submitted'],
+  Contacted: ['Preparing Documents', 'Submitted'],
+  'Preparing Documents': ['Submitted'],
+  Submitted: [],
+  Approved: ['Accepted', 'Rejected'],
+  Declined: [],
+  KIV: ['Preparing Documents', 'Submitted'],
+  Accepted: [],
+  Rejected: [],
+};
+
+/**
+ * Helper Function: Validate Status Transition
+ * 
+ * Requirements:
+ * 1) Admin can do ANY transition from any status to any status, no restrictions.
+ * 2) Agent can only:
+ *    - Move up to 'Submitted' from the initial statuses.
+ *    - If 'Approved', agent can do -> 'Accepted' or 'Rejected'.
+ *    - If 'KIV', agent can do -> 'Preparing Documents' or 'Submitted'.
+ *    - 'Declined', 'Accepted', 'Rejected' -> agent can do nothing.
+ *    - Also, agent can only update leads assigned to them.
+ */
+const isValidTransition = (currentStatus, newStatus, role, assignedAgentId, userId) => {
+  // 1) Admin can do absolutely anything
+  if (role === 'Admin') {
+    return true;
+  }
+
+  // 2) If not Admin, must be the assigned agent to do anything
+  if (assignedAgentId !== userId) {
+    return false;
+  }
+
+  // 3) Must be a valid transition according to 'agentAllowedTransitions'
+  const allowedNextStates = agentAllowedTransitions[currentStatus] || [];
+  return allowedNextStates.includes(newStatus);
 };
 
 // Helper Function: Send Error Response
 const sendError = (res, status, message, details = null) => {
-    const errorResponse = { error: message };
-    if (details) errorResponse.details = details;
-    res.status(status).json(errorResponse);
+  const errorResponse = { error: message };
+  if (details) errorResponse.details = details;
+  res.status(status).json(errorResponse);
 };
 
-// Helper Function: Validate Status Transition
-const isValidTransition = (currentStatus, newStatus, role) => {
-    const allowedStatuses = allowedTransitions[currentStatus];
-    if (!allowedStatuses || !allowedStatuses.includes(newStatus)) {
-        return false;
-    }
-
-    if (
-        ['Approved', 'Declined', 'KIV'].includes(newStatus) &&
-        role !== 'Admin'
-    ) {
-        return false;
-    }
-
-    return true;
-};
-
-// Create a new lead (assign to the parent agent of the referrer)
+/**
+ * Route: Create a New Lead
+ * POST /api/leads
+ */
 router.post('/', async (req, res) => {
-    const { name, phone, loan_amount, referrer_code } = req.body;
+  console.log('[DEBUG] /api/leads POST route hit');
+  const { name, phone, referrer_code, loan_amount } = req.body;
 
-    try {
-        // Validate required fields
-        if (!name || !phone || !loan_amount) {
-            return res.status(400).json({ error: 'Name, phone, and loan amount are required.' });
-        }
+  try {
+      let parentAgentId = null;
+      let referrerId = null;  // Variable to store the referrer_id
 
-        // Validate phone number (10-15 digits)
-        const phonePattern = /^[0-9]{10,15}$/;
-        if (!phonePattern.test(phone)) {
-            return res.status(400).json({ error: 'Phone number must be between 10 and 15 digits and contain only numbers.' });
-        }
+      if (referrer_code) {
+          // Find the referrer using the referral code
+          const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
+          if (!referrer) {
+              return res.status(404).json({ error: 'Referrer not found' });
+          }
 
-        let parentAgentId = null;
-        let referrerId = null;
+          // If a parent_referrer_id exists, assign the lead to the parent; otherwise, to the referrer
+          parentAgentId = referrer.parent_referrer_id || referrer.id;
+          if (!parentAgentId) {
+              return res.status(404).json({ error: 'Parent agent not found' });
+          }
 
-        // If a referrer code is provided, find the referrer agent
-        if (referrer_code) {
-            const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
-            if (!referrer) {
-                return res.status(404).json({ error: 'Referrer not found' });
-            }
+          // Track the referrer_id in case we need it for commissions or other purposes
+          referrerId = referrer.id;
+      } else {
+          // If no referrer_code, try assigning directly by phone
+          const directAgent = await Agent.findOne({ where: { phone } });
+          if (!directAgent) {
+              return res.status(404).json({ error: 'Agent not found' });
+          }
 
-            // Validate that the parent_referrer_id is a valid UUID
-            if (referrer.parent_referrer_id && !isUuid(referrer.parent_referrer_id)) {
-                return res.status(400).json({ error: 'Invalid parent referrer ID.' });
-            }
+          parentAgentId = directAgent.id;
+      }
 
-            // Get the parent agent of the referrer (the agent who will handle the lead)
-            parentAgentId = referrer.parent_referrer_id;
-            referrerId = referrer.id;  // Referrer ID should be assigned here
-            
-            if (!parentAgentId) {
-                return res.status(404).json({ error: 'Parent agent not found' });
-            }
-        }
+      // Create the new Lead and track the referrer_id
+      const newLead = await Lead.create({
+          name,
+          phone,
+          referrer_code,
+          loan_amount,
+          assigned_agent_id: parentAgentId,
+          referrer_id: referrerId,  // Save the referrer_id in the lead
+      });
 
-        // Create the lead and assign to the parent agent of the referrer
-        const newLead = await Lead.create({
-            name,
-            phone,  // Use phone instead of contact
-            loan_amount,
-            referrer_code,
-            assigned_agent_id: parentAgentId,  // Set assigned_agent_id to parentAgentId
-            referrer_id: referrerId,  // Set referrer_id to the referrer's ID
-        });
-
-        res.status(201).json({
-            message: 'Lead created successfully',
-            data: newLead,
-        });
-    } catch (error) {
-        console.error('[ERROR] Error creating lead:', error);  // Log error details
-        res.status(500).json({ error: 'Error creating lead', details: error.message });
-    }
+      res.status(201).json({
+          message: 'Lead created successfully',
+          lead: newLead,
+      });
+  } catch (error) {
+      console.error('[ERROR] Error creating lead:', error.message);
+      res.status(500).json({ error: 'Error creating lead', details: error.message });
+  }
 });
 
-
-
-// Route: Get Leads with Pagination and Filters
+/**
+ * Route: Get Leads with Pagination and Filters
+ * GET /api/leads
+ */
 router.get('/', async (req, res) => {
-    try {
-        const { status, agent_id, start_date, end_date, page = 1, limit = 10 } = req.query;
-        const filter = {};
-        const pageNumber = parseInt(page, 10);
-        const pageSize = Math.min(parseInt(limit, 10), MAX_LIMIT);
+  const { status, agent_id, start_date, end_date, page = 1, limit = 10 } = req.query;
+  const filter = {};
+  const pageNumber = parseInt(page, 10);
+  const pageSize = Math.min(parseInt(limit, 10), MAX_LIMIT);
 
-        if (isNaN(pageNumber) || pageNumber < 1 || isNaN(pageSize) || pageSize < 1) {
-            return sendError(res, 400, 'Invalid pagination parameters');
-        }
-
-        if (status) filter.status = status;
-        if (agent_id) filter.assigned_agent_id = agent_id;
-        if (start_date && end_date) {
-            filter.createdAt = {
-                [Op.between]: [new Date(start_date), new Date(end_date)],
-            };
-        }
-
-        const offset = (pageNumber - 1) * pageSize;
-
-        const leads = await Lead.findAndCountAll({
-            where: filter,
-            limit: pageSize,
-            offset,
-            include: [
-                {
-                    model: Agent,
-                    as: 'agent',
-                    attributes: ['id', 'name', 'phone', 'email'],
-                },
-            ],
-        });
-
-        res.status(200).json({
-            total: leads.count,
-            totalPages: Math.ceil(leads.count / pageSize),
-            currentPage: pageNumber,
-            leads: leads.rows,
-        });
-    } catch (error) {
-        console.error('[ERROR] Error fetching leads:', error.message);
-        sendError(res, 500, 'Error fetching leads', error.message);
+  try {
+    // Validate pagination
+    if (isNaN(pageNumber) || pageNumber < 1 || isNaN(pageSize) || pageSize < 1) {
+      return sendError(res, 400, 'Invalid pagination parameters');
     }
+
+    // Check if the logged-in agent is requesting only their own leads
+    // (Assuming req.user is set by authentication middleware)
+    const { id } = req.user;
+    if (agent_id && agent_id !== id) {
+      return res.status(403).json({ error: 'Forbidden: You can only access your own leads.' });
+    }
+
+    // Apply filters
+    if (status) filter.status = status;
+    if (agent_id) filter.assigned_agent_id = agent_id;
+    if (start_date && end_date) {
+      filter.createdAt = {
+        [Op.between]: [new Date(start_date), new Date(end_date)],
+      };
+    }
+
+    const offset = (pageNumber - 1) * pageSize;
+
+    // Fetch leads with pagination + include associated Agent
+    const leads = await Lead.findAndCountAll({
+      where: filter,
+      limit: pageSize,
+      offset,
+      include: [
+        {
+          model: Agent,
+          as: 'agent', // Must match the 'as' in Lead model
+          attributes: ['id', 'name', 'phone', 'email'],
+        },
+      ],
+    });
+
+    res.status(200).json({
+      total: leads.count,
+      totalPages: Math.ceil(leads.count / pageSize),
+      currentPage: pageNumber,
+      leads: leads.rows,
+    });
+  } catch (error) {
+    console.error('[ERROR] Error fetching leads:', error.message);
+    sendError(res, 500, 'Error fetching leads', error.message);
+  }
 });
 
-// Route: Get a Single Lead by ID
-router.get('/:id', async (req, res) => {
-    const { id } = req.params;
-
-    try {
-        const lead = await Lead.findByPk(id, {
-            include: [
-                {
-                    model: Agent,
-                    as: 'agent',
-                    attributes: ['id', 'name', 'phone', 'email'],
-                },
-            ],
-        });
-
-        if (!lead) return sendError(res, 404, 'Lead not found');
-
-        res.status(200).json(lead);
-    } catch (error) {
-        console.error('[ERROR] Error fetching lead:', error.message);
-        sendError(res, 500, 'Error fetching lead', error.message);
-    }
-});
-
-// Route: Update Lead Status or Assign Agent
+/**
+ * Route: Update Lead Status or Assign Agent
+ * PATCH /api/leads/:id
+ */
 router.patch('/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status, role, assigned_agent_id, loan_amount } = req.body;
+  try {
+    const { id } = req.params;
+    const { status, role, assigned_agent_id, loan_amount } = req.body;
 
-        // Fetch the lead by ID
-        const lead = await Lead.findByPk(id);
-        if (!lead) {
-            return sendError(res, 404, 'Lead not found');
-        }
-
-        // Assign agent if provided
-        if (assigned_agent_id) {
-            const agent = await Agent.findByPk(assigned_agent_id);
-            if (!agent) return sendError(res, 400, 'Invalid agent ID');
-            lead.assigned_agent_id = assigned_agent_id;
-        }
-
-        // Status transition validation
-        if (status) {
-            if (!isValidTransition(lead.status, status, role)) {
-                return sendError(res, 400, `Invalid status transition from '${lead.status}' to '${status}'`);
-            }
-
-            lead.status = status;
-
-            // If status is 'Accepted', validate and calculate commission
-            if (status === 'Accepted') {
-                if (!loan_amount) return sendError(res, 400, 'Loan amount is required for commissions.');
-
-                const { maxCommission, referrerCommission, agentCommission } = calculateCommission(loan_amount, lead.referrer_id);
-
-                await Commission.create({
-                    lead_id: lead.id,
-                    agent_id: lead.assigned_agent_id,
-                    referrer_id: lead.referrer_id,
-                    loan_amount,
-                    max_commission: maxCommission,
-                    referrer_commission: referrerCommission,
-                    agent_commission: agentCommission,
-                    status: 'Pending',
-                });
-            }
-        }
-
-        // Save the updated lead
-        await lead.save();
-        const updatedLead = await Lead.findByPk(id); // Fetch updated data
-        res.status(200).json(updatedLead);
-    } catch (error) {
-        console.error('[ERROR] Error updating lead:', error.message);
-        sendError(res, 500, 'Error updating lead', error.message);
+    // Fetch the lead by ID
+    const lead = await Lead.findByPk(id);
+    if (!lead) {
+      return sendError(res, 404, 'Lead not found');
     }
+
+    // Get logged-in agent's ID from the token
+    const { id: loggedInAgentId } = req.user;
+
+    // If a new assigned_agent_id is provided, only Admin can do that
+    if (assigned_agent_id && role === 'Admin') {
+      const agent = await Agent.findByPk(assigned_agent_id);
+      if (!agent) {
+        return sendError(res, 400, 'Invalid agent ID');
+      }
+      lead.assigned_agent_id = assigned_agent_id;
+    }
+
+    // If we are updating the status
+    if (status) {
+      // Check if the transition is allowed
+      const canTransition = isValidTransition(
+        lead.status,
+        status,
+        role,
+        lead.assigned_agent_id,
+        loggedInAgentId
+      );
+      if (!canTransition) {
+        return sendError(
+          res,
+          400,
+          `Invalid status transition from '${lead.status}' to '${status}'`
+        );
+      }
+
+      lead.status = status;
+
+      // If status is 'Accepted', compute commission
+      if (status === 'Accepted') {
+        if (!loan_amount) {
+          return sendError(res, 400, 'Loan amount is required for commissions.');
+        }
+
+        const { maxCommission, referrerCommission, agentCommission } =
+          calculateCommission(loan_amount, lead.referrer_id);
+
+        await Commission.create({
+          lead_id: lead.id,
+          agent_id: lead.assigned_agent_id,
+          referrer_id: lead.referrer_id,
+          loan_amount,
+          max_commission: maxCommission,
+          referrer_commission: referrerCommission,
+          agent_commission: agentCommission,
+          status: 'Pending', // Commission status can be 'Pending'
+        });
+      }
+    }
+
+    // Save the updated lead
+    await lead.save();
+
+    // Return the updated lead, including agent information
+    const updatedLead = await Lead.findByPk(id, {
+      include: [
+        {
+          model: Agent,
+          as: 'agent',
+          attributes: ['id', 'name', 'phone', 'email'],
+        },
+      ],
+    });
+
+    res.status(200).json(updatedLead);
+  } catch (error) {
+    console.error('[ERROR] Error updating lead:', error.message);
+    sendError(res, 500, 'Error updating lead', error.message);
+  }
 });
 
-
-// Export Router
 module.exports = router;

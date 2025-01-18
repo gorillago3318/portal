@@ -24,12 +24,22 @@ if (!process.env.DATABASE_URL) {
 const app = express();
 app.use(bodyParser.json());
 
+// Register the authRouter first
+const authRouter = require('./routes/auth'); // Adjust path if needed
+app.use('/api/auth', authRouter); // Register the authRouter before applying authMiddleware
+
 // Apply Global Middleware
-app.use(authMiddleware);
+app.use(authMiddleware); // Apply global authMiddleware after authRouter
 
 // Set logging format
 const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
 app.use(morgan(morganFormat)); // Logging
+
+// Debugging: Log incoming requests
+app.use((req, res, next) => {
+    console.log(`[DEBUG] Incoming Request: ${req.method} ${req.originalUrl}`);
+    next();  // Pass control to the next middleware/route
+});
 
 // Test route
 app.get('/', (req, res) => {
@@ -75,6 +85,13 @@ app.get('/health', async (req, res) => {
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
+
+// Debugging: List registered routes
+app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+        console.log(`[DEBUG] Registered route: ${middleware.route.path}`);
+    }
+});
 
 // Default 404 handler
 app.use((req, res) => {

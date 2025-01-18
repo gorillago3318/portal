@@ -1,7 +1,10 @@
 const express = require('express');
-const { checkRole } = require('../middleware/authMiddleware'); // Middleware for role checking
 const router = express.Router();
 const { Agent } = require('../models'); // Adjusted import for models
+const bcrypt = require('bcrypt');
+const { authMiddleware, checkRole } = require('../middleware/authMiddleware'); // Adjust the path as needed
+
+
 
 // Helper function to send a response
 const sendResponse = (res, status, message, data = null, error = null) => {
@@ -10,151 +13,197 @@ const sendResponse = (res, status, message, data = null, error = null) => {
     res.status(status).json(response);
 };
 
-// Create a new agent (Admin)
-router.post('/', async (req, res) => {
+// Admin creation route (restricted to existing Admins)
+router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, res) => {
     const { name, phone, email, location, status } = req.body;
 
     try {
-        const existingAgent = await Agent.findOne({
-            where: { phone },
-            paranoid: false,
-        });
-
-        if (existingAgent) {
-            const msg = existingAgent.deletedAt
-                ? 'This phone number belongs to a soft-deleted agent. Restore the agent or use a different phone number.'
-                : 'Phone number already in use';
-            return sendResponse(res, 400, msg);
+        // Check if the email or phone number already exists
+        const existingAdmin = await Agent.findOne({ where: { email } });
+        if (existingAdmin) {
+            return res.status(400).json({ error: 'Admin with this email already exists.' });
         }
 
-        // Create the new agent with the default referral code generation handled by beforeCreate
-        const newAgent = await Agent.create({
+        // Generate a temporary password
+        const tempPassword = Math.random().toString(36).slice(-8);
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+        // Create the new admin
+        const newAdmin = await Agent.create({
             name,
             phone,
             email,
             location,
-            status: status || 'Active',  // Default to 'Active' if no status is provided
+            role: 'Admin', // Set the role explicitly
+            status: status || 'Active', // Default status is Active
+            password: hashedPassword, // Save the hashed password in the password column
         });
 
-        sendResponse(res, 201, 'Agent created successfully', newAgent);
+        res.status(201).json({
+            message: 'Admin created successfully',
+            temp_password: tempPassword, // Provide the plain temp password for the admin
+        });
     } catch (error) {
-        sendResponse(res, 500, 'Error creating agent', null, error.message);
+        console.error('[ERROR] Error creating admin:', error.message);
+        res.status(500).json({ error: 'Error creating admin', details: error.message });
     }
 });
 
-// Self-Registration (Default Pending Status)
-router.post('/register', async (req, res) => {
-    const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
-
+// ------------------- 1) ADMIN CREATES A NEW AGENT -------------------
+router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, res) => {
+    const { name, phone, email, location, bank_name, account_number, status } = req.body;
+  
     try {
-        const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
-        if (existingAgent) {
-            return sendResponse(res, 400, 'Phone number already in use');
-        }
-
-        if (!bank_name || !account_number) {
-            return sendResponse(res, 400, 'Bank name and account number are required for registration');
-        }
-
-        let parent_referrer_id = null;
-        if (referrer_code) {
-            // Find the agent using the referral code
-            const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
-            if (!referrer) {
-                return sendResponse(res, 404, 'Referrer not found');
-            }
-            parent_referrer_id = referrer.id;  // Set the referrer ID (parent_referrer_id)
-        }
-
-        const newAgent = await Agent.create({
-            name,
-            phone,
-            email,
-            location,
-            bank_name,
-            account_number,
-            status: 'Pending',  // Default status
-            parent_referrer_id,  // Link the agent to the referrer
-        });
-
-        sendResponse(res, 201, 'Registration successful. Awaiting approval.', newAgent);
+      // Check if phone number or email already exists
+      const existingAgent = await Agent.findOne({ where: { phone } });
+      if (existingAgent) {
+        return res.status(400).json({ error: 'An agent with this phone number already exists.' });
+      }
+  
+      // Generate a temporary password
+      const tempPassword = Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+  
+      // Create the agent (store hashedPassword in 'password')
+      const newAgent = await Agent.create({
+        name,
+        phone,
+        email,
+        location,
+        bank_name,
+        account_number,
+        role: 'Agent', // Default role is Agent
+        status: status || 'Pending', // Default status is Pending
+        password: hashedPassword, // Save hashed password in the 'password' field
+      });
+  
+      // Return same style response
+      res.status(201).json({
+        message: 'Agent created successfully',
+        agent: {
+          id: newAgent.id,
+          name: newAgent.name,
+          phone: newAgent.phone,
+          email: newAgent.email,
+          status: newAgent.status,
+          referral_code: newAgent.referral_code, // Include the referral code
+        },
+        temp_password: tempPassword,
+      });
     } catch (error) {
-        sendResponse(res, 500, 'Error registering agent', null, error.message);
+      console.error('[ERROR] Error creating agent:', error.message);
+      res.status(500).json({ error: 'Error creating agent', details: error.message });
     }
-});
-
-// Register a Referrer (Agents Only)
-router.post('/register-referrer', async (req, res) => {
+  });
+  
+  // ------------------- 2) SELF-REGISTRATION (Pending Status) -------------------
+  router.post('/register', async (req, res) => {
     const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
-
+  
     try {
-        // Find the agent using the referrer code
+      const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
+      if (existingAgent) {
+        return sendResponse(res, 400, 'Phone number already in use');
+      }
+  
+      if (!bank_name || !account_number) {
+        return sendResponse(res, 400, 'Bank name and account number are required for registration');
+      }
+  
+      let parent_referrer_id = null;
+      if (referrer_code) {
         const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
         if (!referrer) {
-            return sendResponse(res, 404, 'Referrer not found');
+          return sendResponse(res, 404, 'Referrer not found');
         }
-
-        // Check if the phone number is already in use (soft-deleted agents included)
-        const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
-        if (existingAgent) {
-            return sendResponse(res, 400, 'Phone number already in use');
-        }
-
-        if (!bank_name || !account_number) {
-            return sendResponse(res, 400, 'Bank name and account number are required');
-        }
-
-        // Create the referrer agent
-        const newReferrer = await Agent.create({
-            name,
-            phone,
-            email,
-            location,
-            bank_name,
-            account_number,
-            role: 'Referrer',
-            parent_referrer_id: referrer.id,  // Link the referrer to the parent agent
-            status: 'Active',  // Default status for referrers is Active
-        });
-
-        sendResponse(res, 201, 'Referrer registered successfully', newReferrer);
+        parent_referrer_id = referrer.id;
+      }
+  
+      // Generate a temporary password
+      const tempPassword = Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+  
+      // Create the new Agent (store hashedPassword in 'password')
+      const newAgent = await Agent.create({
+        name,
+        phone,
+        email,
+        location,
+        bank_name,
+        account_number,
+        status: 'Pending', // Default to Pending
+        parent_referrer_id,
+        password: hashedPassword, // <-- store in password, not temp_password
+      });
+  
+      // Return similar style response
+      sendResponse(res, 201, 'Registration successful. Awaiting approval.', {
+        id: newAgent.id,
+        name: newAgent.name,
+        phone: newAgent.phone,
+        email: newAgent.email,
+        status: newAgent.status,
+        referral_code: newAgent.referral_code,
+        temp_password: tempPassword, // Provide plain temp password in response
+      });
     } catch (error) {
-        sendResponse(res, 500, 'Error registering referrer', null, error.message);
+      console.error('[ERROR] Error registering agent:', error.message);
+      sendResponse(res, 500, 'Error registering agent', null, error.message);
     }
-});
-
-// Create a new lead and assign to the parent agent of the referrer
-router.post('/leads', async (req, res) => {
-    const { name, contact, referrer_code } = req.body;
-
+  });
+  
+  // ------------------- 3) REGISTER A REFERRER (Same style) -------------------
+  router.post('/register-referrer', async (req, res) => {
+    const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
+  
     try {
-        let parentAgentId = null;
-
-        if (referrer_code) {
-            // Find the referrer using the referral code
-            const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
-            if (!referrer) {
-                return sendResponse(res, 404, 'Referrer not found');
-            }
-            parentAgentId = referrer.parent_referrer_id;  // Get the parent agent of the referrer
-            if (!parentAgentId) {
-                return sendResponse(res, 404, 'Parent agent not found');
-            }
-        }
-
-        // Create the lead and assign to the parent agent of the referrer
-        const newLead = await Lead.create({
-            name,
-            contact,
-            referrer_code,  // Store the referrer_code
-            parent_agent_id: parentAgentId,  // Assign to the parent agent
-        });
-
-        sendResponse(res, 201, 'Lead created successfully', newLead);
+      const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
+      if (!referrer) {
+        return sendResponse(res, 404, 'Referrer not found');
+      }
+  
+      const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
+      if (existingAgent) {
+        return sendResponse(res, 400, 'Phone number already in use');
+      }
+  
+      if (!bank_name || !account_number) {
+        return sendResponse(res, 400, 'Bank name and account number are required');
+      }
+  
+      // Generate a temporary password
+      const tempPassword = Math.random().toString(36).slice(-8);
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
+  
+      // Create the Referrer (store hashedPassword in 'password')
+      const newReferrer = await Agent.create({
+        name,
+        phone,
+        email,
+        location,
+        bank_name,
+        account_number,
+        role: 'Referrer',
+        parent_referrer_id: referrer.id,
+        status: 'Active',
+        password: hashedPassword, // <-- store in password
+      });
+  
+      // Return same style response as create-agent
+      sendResponse(res, 201, 'Referrer registered successfully', {
+        id: newReferrer.id,
+        name: newReferrer.name,
+        phone: newReferrer.phone,
+        email: newReferrer.email,
+        status: newReferrer.status,
+        referral_code: newReferrer.referral_code,
+        temp_password: tempPassword, // Provide plain temp password
+      });
     } catch (error) {
-        sendResponse(res, 500, 'Error creating lead', null, error.message);
+      console.error('[ERROR] Error registering referrer:', error.message);
+      sendResponse(res, 500, 'Error registering referrer', null, error.message);
     }
-});
+  });
 
 // Generate Referral Link
 router.get('/:id/referral-link', async (req, res) => {

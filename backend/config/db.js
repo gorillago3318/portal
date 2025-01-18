@@ -1,39 +1,38 @@
+// config/db.js
 const { Sequelize } = require('sequelize');
 
-// Ensure DATABASE_URL is defined
 if (!process.env.DATABASE_URL) {
-    console.error('DATABASE_URL is not set in the environment variables.');
-    process.exit(1);
+  console.error('DATABASE_URL is not set in the environment variables.');
+  process.exit(1);
 }
 
-// Initialize Sequelize
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
-    dialect: 'postgres',
-    protocol: 'postgres',
-    dialectOptions: {
-        ssl: {
-            require: true, // Enforce SSL for all connections
-            rejectUnauthorized: false, // Allow self-signed certificates
-        },
+  dialect: 'postgres',
+  protocol: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
     },
-    pool: {
-        max: 5, // Maximum number of connections
-        min: 0, // Minimum number of connections
-        acquire: 30000, // Maximum time (ms) to get a connection
-        idle: 10000, // Time (ms) a connection can remain idle before being released
-    },
-    logging: console.log, // Optional: Enable logging for debugging
+  },
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000,
+  },
+  logging: console.log, // or false if you want to silence SQL logs
 });
 
-// Test Database Connection
+// Test DB connection
 (async () => {
-    try {
-        await sequelize.authenticate();
-        console.log('Database connected successfully with SSL.');
-    } catch (error) {
-        console.error('Unable to connect to the database:', error.message);
-        process.exit(1); // Exit the application if the connection fails
-    }
+  try {
+    await sequelize.authenticate();
+    console.log('Database connected successfully with SSL.');
+  } catch (error) {
+    console.error('Unable to connect to the database:', error.message);
+    process.exit(1);
+  }
 })();
 
 module.exports = sequelize;
