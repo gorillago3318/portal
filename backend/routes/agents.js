@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Agent } = require('../models'); // Adjusted import for models
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const { authMiddleware, checkRole } = require('../middleware/authMiddleware'); // Adjust the path as needed
 
 
@@ -12,6 +13,82 @@ const sendResponse = (res, status, message, data = null, error = null) => {
     if (error) response.error = error;
     res.status(status).json(response);
 };
+
+
+// ------------------------------------------------------
+// 1) PUBLIC ROUTES (No authMiddleware) for password reset
+// ------------------------------------------------------
+
+// Forgot Password
+router.post('/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return sendResponse(res, 400, 'Email is required');
+      }
+  
+      const agent = await Agent.findOne({ where: { email }, paranoid: false });
+      if (!agent) {
+        // Don't reveal if the account doesn't exist
+        return sendResponse(res, 200, 'If this account exists, a reset link has been sent to your email.');
+      }
+  
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const expires = Date.now() + 60 * 60 * 1000; // 1 hour
+  
+      agent.reset_password_token = resetToken;
+      agent.reset_password_expires = new Date(expires);
+      await agent.save();
+  
+      // In production, send the token by email/WhatsApp:
+      // sendEmail(agent.email, `Your password reset token: ${resetToken}`);
+  
+      return sendResponse(res, 200, 'Reset token generated successfully', {
+        reset_token: resetToken,
+        expires: agent.reset_password_expires,
+      });
+    } catch (error) {
+      console.error('[ERROR][forgot-password]:', error.message);
+      return sendResponse(res, 500, 'Error initiating password reset', null, error.message);
+    }
+  });
+  
+  // Reset Password
+  router.post('/reset-password', async (req, res) => {
+    try {
+      const { token, new_password } = req.body;
+      if (!token || !new_password) {
+        return sendResponse(res, 400, 'Token and new_password are required');
+      }
+  
+      const agent = await Agent.findOne({
+        where: { reset_password_token: token },
+        paranoid: false,
+      });
+      if (!agent) {
+        return sendResponse(res, 400, 'Invalid or expired token');
+      }
+  
+      if (Date.now() > agent.reset_password_expires.getTime()) {
+        return sendResponse(res, 400, 'Reset token has expired. Please request a new one.');
+      }
+  
+      if (new_password.length < 8) {
+        return sendResponse(res, 400, 'Password must be at least 8 characters long');
+      }
+  
+      const hashedPassword = await bcrypt.hash(new_password, 10);
+      agent.password = hashedPassword;
+      agent.reset_password_token = null;
+      agent.reset_password_expires = null;
+      await agent.save();
+  
+      return sendResponse(res, 200, 'Password reset successful. You can now login with your new password.');
+    } catch (error) {
+      console.error('[ERROR][reset-password]:', error.message);
+      return sendResponse(res, 500, 'Error resetting password', null, error.message);
+    }
+  });
 
 // Admin creation route (restricted to existing Admins)
 router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, res) => {
@@ -205,6 +282,7 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
     }
   });
 
+   
 // Generate Referral Link
 router.get('/:id/referral-link', async (req, res) => {
     const { id } = req.params;
