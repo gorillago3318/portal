@@ -1,4 +1,5 @@
 const express = require('express');
+const qrRoute = require('./routes/qrRoute'); // Adjust path if needed
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 require('dotenv').config();
@@ -40,6 +41,8 @@ app.use((req, res, next) => {
     console.log(`[DEBUG] Incoming Request: ${req.method} ${req.originalUrl}`);
     next();  // Pass control to the next middleware/route
 });
+
+app.use('/api', qrRoute);
 
 // Test route
 app.get('/', (req, res) => {
