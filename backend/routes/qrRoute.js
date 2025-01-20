@@ -1,15 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { getQRCode } = require('../services/whatsappService'); // Import the QR code service
+const { getQRCode } = require('../services/whatsappService');
 
-// Route to display the QR code in an HTML page
+// Serve the QR code as HTML
 router.get('/qr', (req, res) => {
-    const qr = getQRCode(); // Retrieve the latest QR code data
+    const qr = getQRCode();
     if (!qr) {
-        return res.status(404).send('QR code not available yet. Try again later.');
+        return res.status(404).send(`
+            <html>
+                <body>
+                    <h1>QR code not available yet</h1>
+                    <p>Please ensure the WhatsApp bot is running and refresh this page.</p>
+                </body>
+            </html>
+        `);
     }
 
-    // Generate an HTML page with the QR code
     const html = `
         <html>
             <head>
@@ -18,7 +24,7 @@ router.get('/qr', (req, res) => {
             <body>
                 <h1>Scan this QR Code with WhatsApp</h1>
                 <img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300" />
-                <p>If the QR code is not working, ensure your bot is running and try refreshing this page.</p>
+                <p>Refresh this page if the QR code has expired.</p>
             </body>
         </html>
     `;
