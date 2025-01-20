@@ -29,7 +29,7 @@ const authRouter = require('./routes/auth'); // Adjust path if needed
 app.use('/api/auth', authRouter); // Register the authRouter before applying authMiddleware
 
 // Apply Global Middleware
-app.use(authMiddleware); // Apply global authMiddleware after authRouter
+app.use('/api/protected-route', authMiddleware); // Example protected route
 
 // Set logging format
 const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
