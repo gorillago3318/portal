@@ -6,7 +6,7 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        handleSIGINT: false, // Prevent Puppeteer from handling SIGINT
+        handleSIGINT: false, // Prevent Puppeteer from registering its own SIGINT handler
     },
 });
 
@@ -38,7 +38,8 @@ client.on('disconnected', (reason) => {
 // Function to send WhatsApp messages
 async function sendWhatsAppMessage(phone, message) {
     try {
-        await client.sendMessage(phone, message);
+        const recipientId = `${phone}@c.us`; // Ensure correct format for WhatsApp numbers
+        await client.sendMessage(recipientId, message);
         logger.info(`Message sent to ${phone}: ${message}`);
     } catch (error) {
         logger.error(`Failed to send message to ${phone}:`, error);
@@ -46,7 +47,18 @@ async function sendWhatsAppMessage(phone, message) {
     }
 }
 
-// Graceful Shutdown
+// Initialize WhatsApp Client with error handling
+const initializeWhatsApp = async () => {
+    try {
+        logger.info('Initializing WhatsApp client...');
+        await client.initialize();
+    } catch (err) {
+        logger.error('Failed to initialize WhatsApp client:', err);
+        throw err; // Re-throw to be handled by the calling code
+    }
+};
+
+// Graceful shutdown handler
 const handleShutdown = async () => {
     logger.info('Shutting down WhatsApp client...');
     try {
@@ -59,17 +71,6 @@ const handleShutdown = async () => {
     }
 };
 
-// Initialize the client
-const initializeWhatsApp = async () => {
-    try {
-        logger.info('Initializing WhatsApp client...');
-        await client.initialize();
-    } catch (err) {
-        logger.error('Failed to initialize WhatsApp client:', err);
-        throw err;
-    }
-};
-
 // Register shutdown handlers
 process.on('SIGTERM', handleShutdown);
 process.on('SIGINT', handleShutdown);
@@ -77,4 +78,5 @@ process.on('SIGINT', handleShutdown);
 module.exports = {
     initializeWhatsApp,
     sendWhatsAppMessage,
+    handleShutdown, // Export for testing purposes
 };
