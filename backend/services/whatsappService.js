@@ -18,15 +18,14 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
-        executablePath: process.env.CHROMIUM_PATH || undefined, // Use system Chromium path if set
         args: [
-            '--no-sandbox', // Needed for environments without user namespaces
-            '--disable-setuid-sandbox', // Disable sandbox for non-root environments
-            '--disable-dev-shm-usage', // Prevent shared memory issues
-            '--disable-accelerated-2d-canvas', // Improve performance in headless mode
-            '--no-first-run', // Skip first-run tasks
-            '--no-zygote', // Improve resource efficiency
-            '--disable-gpu', // Disable GPU usage in headless mode
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
         ],
     },
 });
