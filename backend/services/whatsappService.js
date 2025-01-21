@@ -13,27 +13,27 @@ const client = new Client({
 
 // QR Code Event
 client.on('qr', (qr) => {
-    logger.info('QR Code received. Scan it with your WhatsApp app.');
-    qrcode.generate(qr, { small: true }); // Display QR code in terminal
+    logger.info('[INFO] QR Code received. Scan it with your WhatsApp app.');
+    qrcode.generate(qr, { small: true }); // Display QR code in the terminal
 });
 
 // Ready Event
 client.on('ready', () => {
-    logger.info('✅ WhatsApp client is ready!');
+    logger.info('✅ [INFO] WhatsApp client is ready!');
 });
 
 // Authentication Failed Event
 client.on('auth_failure', (msg) => {
-    logger.error('WhatsApp authentication failed:', msg);
+    logger.error('[ERROR] WhatsApp authentication failed:', msg);
 });
 
 // Disconnected Event
 client.on('disconnected', (reason) => {
-    logger.warn('WhatsApp client disconnected:', reason);
+    logger.warn(`[WARN] WhatsApp client disconnected. Reason: ${reason}`);
     // Attempt to reconnect
-    logger.info('Reinitializing WhatsApp client after disconnect...');
+    logger.info('[INFO] Reinitializing WhatsApp client after disconnect...');
     client.initialize().catch((err) => {
-        logger.error('Failed to reinitialize after disconnect:', err);
+        logger.error('[ERROR] Failed to reinitialize after disconnect:', err.message);
     });
 });
 
@@ -42,9 +42,9 @@ async function sendWhatsAppMessage(phone, message) {
     try {
         const recipientId = `${phone}@c.us`; // Ensure correct format for WhatsApp numbers
         await client.sendMessage(recipientId, message);
-        logger.info(`Message sent to ${phone}: ${message}`);
+        logger.info(`[INFO] Message sent to ${phone}: ${message}`);
     } catch (error) {
-        logger.error(`Failed to send message to ${phone}:`, error);
+        logger.error(`[ERROR] Failed to send message to ${phone}:`, error.message);
         throw error;
     }
 }
@@ -52,23 +52,24 @@ async function sendWhatsAppMessage(phone, message) {
 // Initialize WhatsApp Client with error handling
 const initializeWhatsApp = async () => {
     try {
-        logger.info('Initializing WhatsApp client...');
+        logger.info('[INFO] Initializing WhatsApp client...');
         await client.initialize();
+        logger.info('[INFO] WhatsApp client initialized successfully.');
     } catch (err) {
-        logger.error('Failed to initialize WhatsApp client:', err);
+        logger.error('[ERROR] Failed to initialize WhatsApp client:', err.message);
         throw err; // Re-throw to be handled by the calling code
     }
 };
 
 // Graceful shutdown handler
 const handleShutdown = async () => {
-    logger.info('Shutting down WhatsApp client...');
+    logger.info('[INFO] Shutting down WhatsApp client...');
     try {
         await client.destroy();
-        logger.info('WhatsApp client shut down successfully');
+        logger.info('[INFO] WhatsApp client shut down successfully.');
         process.exit(0);
     } catch (err) {
-        logger.error('Error during shutdown:', err);
+        logger.error('[ERROR] Error during shutdown:', err.message);
         process.exit(1);
     }
 };
@@ -78,7 +79,8 @@ process.on('SIGTERM', handleShutdown);
 process.on('SIGINT', handleShutdown);
 
 module.exports = {
+    client, // Export client for event subscriptions elsewhere
     initializeWhatsApp,
     sendWhatsAppMessage,
-    handleShutdown, // Export for testing purposes
+    handleShutdown, // Export for testing or custom use
 };
