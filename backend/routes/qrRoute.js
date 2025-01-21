@@ -1,34 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const { getQRCode } = require('../services/whatsappService');
+const { getQRCode } = require('../services/whatsappService'); // Import the function to retrieve the QR code
 
 // Serve the QR code as HTML
 router.get('/qr', (req, res) => {
-    const qr = getQRCode();
-    if (!qr) {
+    const qrCodeData = getQRCode(); // Get the latest QR code data
+    if (!qrCodeData) {
         return res.status(404).send(`
             <html>
                 <body>
-                    <h1>QR code not available yet</h1>
-                    <p>Please ensure the WhatsApp bot is running and refresh this page.</p>
+                    <h1>QR Code Not Available</h1>
+                    <p>The WhatsApp client might already be authenticated, or the QR code has expired.</p>
                 </body>
             </html>
         `);
     }
 
-    const html = `
+    // Render the QR code as an image using a public QR code generator
+    const qrCodeImageURL = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCodeData)}&size=300x300`;
+
+    res.send(`
         <html>
-            <head>
-                <title>WhatsApp QR Code</title>
-            </head>
             <body>
                 <h1>Scan this QR Code with WhatsApp</h1>
-                <img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300" />
-                <p>Refresh this page if the QR code has expired.</p>
+                <img src="${qrCodeImageURL}" alt="QR Code" />
+                <p>If the QR code expires, please refresh this page.</p>
             </body>
         </html>
-    `;
-    res.send(html);
+    `);
 });
 
 module.exports = router;

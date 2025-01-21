@@ -14,7 +14,7 @@ console.log('[DEBUG] Starting WhatsApp automation service...');
 const client = new Client({
     authStrategy: new LocalAuth({
         dataPath: './sessions',
-        clientId: 'whatsapp-client',  // Consistent client ID for session management
+        clientId: 'whatsapp-client', // Consistent client ID for session management
     }),
     puppeteer: {
         headless: true,
@@ -25,11 +25,11 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--disable-gpu'
-        ]
+            '--disable-gpu',
+        ],
     },
-    qrMaxRetries: 3,  // Maximum number of QR code generation attempts
-    restartOnAuthFail: true  // Automatically restart on authentication failure
+    qrMaxRetries: 3, // Maximum number of QR code generation attempts
+    restartOnAuthFail: true, // Automatically restart on authentication failure
 });
 
 // State management
@@ -62,6 +62,7 @@ client.on('qr', (qr) => {
     qrcode.toDataURL(qr, (err, url) => {
         if (err) {
             console.error('[ERROR] QR code generation failed:', err);
+            qrCodeUrl = '';
             return;
         }
         qrCodeUrl = url;
@@ -76,6 +77,7 @@ client.on('loading_screen', (percent, message) => {
 client.on('ready', () => {
     isAuthenticated = true;
     connectionRetries = 0;
+    qrCodeUrl = ''; // Clear the QR code once authenticated
     console.log('[INFO] WhatsApp client is ready and fully authenticated!');
 });
 
@@ -87,25 +89,25 @@ client.on('authenticated', () => {
 client.on('auth_failure', async (msg) => {
     console.error('[ERROR] Authentication failed:', msg);
     isAuthenticated = false;
-    
+
     if (connectionRetries < MAX_RETRIES) {
         connectionRetries++;
         console.log(`[INFO] Retrying authentication (Attempt ${connectionRetries}/${MAX_RETRIES})...`);
         clearSessionDirectory();
-        await client.initialize();
+        client.initialize().catch((err) => console.error('[ERROR] Failed to reinitialize client:', err));
     } else {
         console.error('[ERROR] Maximum authentication retries reached. Please restart the application.');
     }
 });
 
-client.on('disconnected', async (reason) => {
+client.on('disconnected', (reason) => {
     console.log(`[INFO] WhatsApp client disconnected. Reason: ${reason}`);
     isAuthenticated = false;
-    
+
     if (connectionRetries < MAX_RETRIES) {
         connectionRetries++;
         console.log(`[INFO] Attempting to reconnect (Attempt ${connectionRetries}/${MAX_RETRIES})...`);
-        await client.initialize();
+        client.initialize().catch((err) => console.error('[ERROR] Failed to reconnect client:', err));
     } else {
         console.error('[ERROR] Maximum reconnection attempts reached. Please restart the application.');
     }
@@ -114,7 +116,7 @@ client.on('disconnected', async (reason) => {
 // Express routes
 app.get('/', (req, res) => {
     console.log('[DEBUG] Serving QR code page...');
-    
+
     if (isAuthenticated) {
         res.send(`
             <div style="text-align: center;">
@@ -160,8 +162,7 @@ const sendWhatsAppMessage = async (phone, message) => {
     console.log(`[DEBUG] Attempting to send message to ${phone}...`);
     try {
         const formattedPhone = phone.includes('@c.us') ? phone : `${phone}@c.us`;
-        const chat = await client.getChatById(formattedPhone);
-        await chat.sendMessage(message);
+        await client.sendMessage(formattedPhone, message);
         console.log(`[INFO] Message sent successfully to ${phone}`);
         return true;
     } catch (error) {
@@ -182,7 +183,6 @@ process.on('SIGINT', async () => {
     process.exit(0);
 });
 
-// Error handling
 process.on('unhandledRejection', (reason, promise) => {
     console.error('[ERROR] Unhandled Promise Rejection:', reason);
 });
@@ -190,7 +190,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Initialize the service
 ensureSessionDirectory();
 console.log('[DEBUG] Initializing WhatsApp client...');
-client.initialize().catch(err => {
+client.initialize().catch((err) => {
     console.error('[ERROR] Failed to initialize WhatsApp client:', err);
 });
 
@@ -201,5 +201,5 @@ app.listen(port, () => {
 
 module.exports = {
     sendWhatsAppMessage,
-    client
+    client,
 };
