@@ -18,6 +18,7 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
+        executablePath: process.env.CHROMIUM_PATH || undefined, // Use pre-installed Chromium if specified
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -29,7 +30,6 @@ const client = new Client({
         ],
     },
 });
-
 
 // Event: QR Code received
 client.on('qr', (qr) => {
@@ -59,9 +59,16 @@ client.on('disconnected', (reason) => {
     client.initialize();
 });
 
-// Event: Error
+// Event: Unexpected error
 client.on('error', (error) => {
     console.error('[ERROR] An unexpected error occurred:', error);
+    console.log('[INFO] Attempting to reinitialize client...');
+    client.initialize();
+});
+
+// Event: Loading progress
+client.on('loading_screen', (percent, message) => {
+    console.log(`[INFO] Loading WhatsApp: ${percent}% - ${message}`);
 });
 
 // Initialize the client
