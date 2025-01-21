@@ -18,7 +18,7 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
-        executablePath: process.env.CHROMIUM_PATH || undefined, // Use custom Chromium path if provided
+        executablePath: process.env.CHROMIUM_PATH || undefined, // Adjust to use pre-installed Chromium
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -30,6 +30,7 @@ const client = new Client({
         ],
     },
 });
+
 
 // Event: QR Code received
 client.on('qr', (qr) => {
