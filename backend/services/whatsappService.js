@@ -6,7 +6,7 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        handleSIGINT: false, // Prevent Puppeteer from registering its own SIGINT handler
+        handleSIGINT: false, // Prevent Puppeteer from handling SIGINT
     },
 });
 
@@ -35,47 +35,18 @@ client.on('disconnected', (reason) => {
     });
 });
 
-// Message Event
-client.on('message', async (msg) => {
-    const chatId = msg.from;
-    const message = msg.body.trim();
-
-    // Log incoming message with masked phone number for privacy
-    const maskedChatId = chatId.replace(/(\d{4})$/, '**');
-    logger.info(`Message received from ${maskedChatId}: ${message}`);
-
+// Function to send WhatsApp messages
+async function sendWhatsAppMessage(phone, message) {
     try {
-        // Respond to a simple "hello" message
-        if (message.toLowerCase() === 'hello') {
-            await client.sendMessage(chatId, 'Hi there! How can I help you?');
-            logger.info(`Replied to ${maskedChatId}`);
-        }
-    } catch (err) {
-        logger.error(`Error processing message from ${maskedChatId}:`, {
-            error: err.message,
-            stack: err.stack,
-        });
-
-        // Send user-friendly error message
-        const errorMessage = 'Sorry, something went wrong. Please try again.';
-        await client.sendMessage(chatId, errorMessage).catch((sendErr) => {
-            logger.error(`Failed to send error message to ${maskedChatId}:`, sendErr);
-        });
+        await client.sendMessage(phone, message);
+        logger.info(`Message sent to ${phone}: ${message}`);
+    } catch (error) {
+        logger.error(`Failed to send message to ${phone}:`, error);
+        throw error;
     }
-});
+}
 
-// Initialize WhatsApp Client with error handling
-const initializeWhatsApp = async () => {
-    try {
-        logger.info('Initializing WhatsApp client...');
-        await client.initialize();
-    } catch (err) {
-        logger.error('Failed to initialize WhatsApp client:', err);
-        throw err; // Re-throw to be handled by the calling code
-    }
-};
-
-// Graceful shutdown handler
+// Graceful Shutdown
 const handleShutdown = async () => {
     logger.info('Shutting down WhatsApp client...');
     try {
@@ -88,11 +59,22 @@ const handleShutdown = async () => {
     }
 };
 
+// Initialize the client
+const initializeWhatsApp = async () => {
+    try {
+        logger.info('Initializing WhatsApp client...');
+        await client.initialize();
+    } catch (err) {
+        logger.error('Failed to initialize WhatsApp client:', err);
+        throw err;
+    }
+};
+
 // Register shutdown handlers
 process.on('SIGTERM', handleShutdown);
 process.on('SIGINT', handleShutdown);
 
 module.exports = {
     initializeWhatsApp,
-    handleShutdown, // Export for testing purposes
+    sendWhatsAppMessage,
 };

@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const { initializeWhatsApp } = require('./services/whatsappService');
 const morgan = require('morgan');
 require('dotenv').config();
 
@@ -31,6 +32,12 @@ app.use('/api/auth', authRouter); // Register the authRouter before applying aut
 
 // Mount QR Code Route
 app.use('/', qrRoute); // Root path for QR code handling
+
+// Initialize WhatsApp
+initializeWhatsApp().catch((err) => {
+    console.error('[ERROR] Failed to initialize WhatsApp:', err.message);
+    process.exit(1);
+});
 
 // Apply Global Middleware
 app.use('/api/protected-route', authMiddleware); // Example protected route
