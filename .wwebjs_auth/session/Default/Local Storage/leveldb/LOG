@@ -1,2 +1,3 @@
-2025/01/21-14:25:14.890 6374 Creating DB C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Local Storage\leveldb since it was missing.
-2025/01/21-14:25:14.910 6374 Reusing MANIFEST C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Local Storage\leveldb/MANIFEST-000001
+2025/01/21-14:33:06.332 5de8 Reusing MANIFEST C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Local Storage\leveldb/MANIFEST-000001
+2025/01/21-14:33:06.333 5de8 Recovering log #3
+2025/01/21-14:33:06.334 5de8 Reusing old log C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Local Storage\leveldb/000003.log 
