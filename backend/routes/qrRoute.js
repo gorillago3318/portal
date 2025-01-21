@@ -2,8 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { getQRCode } = require('../services/whatsappService'); // Import the function to retrieve the QR code
 
-// QR Code display route (replaces the existing test route)
-app.get('/', (req, res) => {
+// State variables (should be updated by your WhatsApp service)
+let qrCodeUrl = ''; // Store the latest QR code URL
+let isAuthenticated = false; // Track authentication status
+
+// Define the QR Code display route
+router.get('/', (req, res) => {
     console.log('[DEBUG] Serving QR code page...');
 
     if (isAuthenticated) {
@@ -44,3 +48,5 @@ app.get('/', (req, res) => {
         `);
     }
 });
+
+module.exports = router;
