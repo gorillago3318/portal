@@ -1,9 +1,20 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode-terminal'); // Terminal QR code display
+const fs = require('fs');
+const path = require('path');
 
-// Initialize WhatsApp Client
+// Ensure session directory exists
+const SESSION_FILE_PATH = path.join(__dirname, '../sessions');
+if (!fs.existsSync(SESSION_FILE_PATH)) {
+    fs.mkdirSync(SESSION_FILE_PATH, { recursive: true });
+}
+
+// Initialize WhatsApp client
 const client = new Client({
-    authStrategy: new LocalAuth(),
+    authStrategy: new LocalAuth({
+        dataPath: SESSION_FILE_PATH,
+        clientId: 'whatsapp-client',
+    }),
     puppeteer: {
         headless: true,
         args: [
@@ -18,31 +29,33 @@ const client = new Client({
     },
 });
 
-
-// Event: QR Code generation
+// Event: QR Code received
 client.on('qr', (qr) => {
-    console.log('[INFO] QR Code received. Displaying in terminal...');
+    console.log('[INFO] Scan the QR code below to authenticate WhatsApp:');
     qrcode.generate(qr, { small: true }); // Display QR code in terminal
 });
 
-// Event: Ready
+// Event: Client is ready
 client.on('ready', () => {
     console.log('[INFO] WhatsApp client is ready!');
 });
 
-// Event: Authenticated
+// Event: Client authenticated
 client.on('authenticated', () => {
-    console.log('[INFO] WhatsApp client authenticated!');
+    console.log('[INFO] WhatsApp client authenticated successfully!');
 });
 
-// Event: Disconnected
+// Event: Authentication failure
+client.on('auth_failure', () => {
+    console.error('[ERROR] WhatsApp authentication failed. Please try again.');
+});
+
+// Event: Client disconnected
 client.on('disconnected', (reason) => {
-    console.log(`[INFO] WhatsApp client disconnected: ${reason}`);
-    client.initialize(); // Reinitialize on disconnect
+    console.log(`[INFO] WhatsApp client disconnected. Reason: ${reason}`);
 });
 
-// Initialize Client
-console.log('[INFO] Initializing WhatsApp client...');
+// Initialize the client
 client.initialize();
 
-module.exports = client;
+module.exports = { client };
