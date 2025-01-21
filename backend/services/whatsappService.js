@@ -85,6 +85,7 @@ client.on('ready', () => {
 
 client.on('authenticated', () => {
     isAuthenticated = true;
+    qrCodeUrl = ''; // Clear QR code once authenticated
     console.log('[INFO] WhatsApp authentication successful!');
 });
 
