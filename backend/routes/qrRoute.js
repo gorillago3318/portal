@@ -1,10 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const { getQRCode } = require('../services/whatsappService'); // Import the function to retrieve the QR code
+const { client } = require('../services/whatsappService'); // Import the initialized WhatsApp client
 
 // State variables (should be updated by your WhatsApp service)
 let qrCodeUrl = ''; // Store the latest QR code URL
 let isAuthenticated = false; // Track authentication status
+
+// Listen to WhatsApp client events to update the state
+client.on('qr', (qr) => {
+    console.log('[DEBUG] New QR code generated');
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
+    qrCodeUrl = qrImageUrl; // Update the QR code URL
+    isAuthenticated = false; // Reset authentication status
+});
+
+client.on('ready', () => {
+    console.log('[INFO] WhatsApp client is ready');
+    qrCodeUrl = ''; // Clear the QR code URL
+    isAuthenticated = true; // Mark as authenticated
+});
 
 // Define the QR Code display route
 router.get('/', (req, res) => {

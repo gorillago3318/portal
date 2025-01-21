@@ -1,4 +1,5 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal'); // Add QR code generator
 const logger = require('../config/logger');
 
 // Initialize WhatsApp Client
@@ -13,6 +14,7 @@ const client = new Client({
 // QR Code Event
 client.on('qr', (qr) => {
     logger.info('QR Code received. Scan it with your WhatsApp app.');
+    qrcode.generate(qr, { small: true }); // Display QR code in terminal
 });
 
 // Ready Event

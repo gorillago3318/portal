@@ -17,8 +17,8 @@ const qrRoute = require('./routes/qrRoute');
 const { authMiddleware } = require('./middleware/authMiddleware');
 
 // Validate environment variables
-if (!process.env.DATABASE_URL) {
-    console.error('[ERROR] Missing DATABASE_URL in environment variables');
+if (!process.env.DATABASE_URL || !process.env.PORT) {
+    console.error('[ERROR] Missing required environment variables: DATABASE_URL and/or PORT');
     process.exit(1);
 }
 
@@ -91,12 +91,14 @@ console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
 
-// Debugging: List registered routes
-app._router.stack.forEach((middleware) => {
-    if (middleware.route) {
-        console.log(`[DEBUG] Registered route: ${middleware.route.path}`);
-    }
-});
+// Debugging: List registered routes only in development
+if (process.env.NODE_ENV === 'development') {
+    app._router.stack.forEach((middleware) => {
+        if (middleware.route) {
+            console.log(`[DEBUG] Registered route: ${middleware.route.path}`);
+        }
+    });
+}
 
 // Default 404 handler
 app.use((req, res) => {
@@ -124,13 +126,8 @@ app.use((err, req, res, next) => {
 
 // Start the server
 const PORT = process.env.PORT; // Render dynamically assigns the port
-if (!PORT) {
-    console.error('[ERROR] PORT environment variable is not set.');
-    process.exit(1);
-}
-
 app.listen(PORT, async () => {
-    console.log(`[INFO] Server is running on port ${PORT}`);
+    console.log(`[INFO] Server is running on http://localhost:${PORT}`);
 
     // Sync Database in development mode
     if (process.env.NODE_ENV !== 'production') {
