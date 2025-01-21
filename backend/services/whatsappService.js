@@ -3,10 +3,12 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
+const BASE_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`;
+
 
 // Express app setup
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000; // Use Render's assigned port or fallback to 3000 for local testing
 
 console.log('[DEBUG] Starting WhatsApp automation service...');
 
@@ -196,7 +198,7 @@ client.initialize().catch((err) => {
 
 // Start Express server
 app.listen(port, () => {
-    console.log(`[INFO] Server running at http://localhost:${port}`);
+    console.log(`[INFO] Server running at ${BASE_URL}`);
 });
 
 module.exports = {
