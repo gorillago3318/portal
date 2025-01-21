@@ -18,7 +18,7 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
-        executablePath: process.env.CHROMIUM_PATH || undefined, // Use pre-installed Chromium if specified
+        executablePath: process.env.CHROMIUM_PATH || undefined, // Use custom Chromium path if provided
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
