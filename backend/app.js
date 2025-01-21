@@ -1,5 +1,4 @@
 const express = require('express');
-const qrRoute = require('./routes/qrRoute'); // Adjust path if needed
 const bodyParser = require('body-parser');
 const morgan = require('morgan');
 require('dotenv').config();
@@ -11,6 +10,7 @@ const Agent = require('./models/agent');
 // Import Routes
 const leadsRouter = require('./routes/leads');
 const agentsRouter = require('./routes/agents');
+const qrRoute = require('./routes/qrRoute');
 
 // Import Middleware
 const { authMiddleware } = require('./middleware/authMiddleware');
@@ -29,6 +29,9 @@ app.use(bodyParser.json());
 const authRouter = require('./routes/auth'); // Adjust path if needed
 app.use('/api/auth', authRouter); // Register the authRouter before applying authMiddleware
 
+// Mount QR Code Route
+app.use('/', qrRoute); // Root path for QR code handling
+
 // Apply Global Middleware
 app.use('/api/protected-route', authMiddleware); // Example protected route
 
@@ -39,15 +42,7 @@ app.use(morgan(morganFormat)); // Logging
 // Debugging: Log incoming requests
 app.use((req, res, next) => {
     console.log(`[DEBUG] Incoming Request: ${req.method} ${req.originalUrl}`);
-    next();  // Pass control to the next middleware/route
-});
-
-app.use('/api', qrRoute);
-
-// Test route
-app.get('/', (req, res) => {
-    console.log('[INFO] GET / - Test route hit');
-    res.send('Portal Backend is Running!');
+    next(); // Pass control to the next middleware/route
 });
 
 // Health-check route
@@ -84,7 +79,7 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// API Routes
+// Register API Routes
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
@@ -121,7 +116,12 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT; // Render dynamically assigns the port
+if (!PORT) {
+    console.error('[ERROR] PORT environment variable is not set.');
+    process.exit(1);
+}
+
 app.listen(PORT, async () => {
     console.log(`[INFO] Server is running on port ${PORT}`);
 
@@ -131,7 +131,7 @@ app.listen(PORT, async () => {
             console.log('[DEBUG] Syncing database...');
             await Promise.all([
                 Lead.sync({ alter: true }),
-                Agent.sync({ alter: true })
+                Agent.sync({ alter: true }),
             ]);
             console.log('[INFO] Database synced successfully.');
         } catch (error) {
