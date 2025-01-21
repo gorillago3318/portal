@@ -1,79 +1,98 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal'); // Terminal QR code display
-const fs = require('fs');
-const path = require('path');
+const logger = require('../config/logger');
 
-// Ensure session directory exists
-const SESSION_FILE_PATH = path.join(__dirname, '../sessions');
-if (!fs.existsSync(SESSION_FILE_PATH)) {
-    console.log('[INFO] Creating session directory...');
-    fs.mkdirSync(SESSION_FILE_PATH, { recursive: true });
-}
-
-// Initialize WhatsApp client
+// Initialize WhatsApp Client
 const client = new Client({
-    authStrategy: new LocalAuth({
-        dataPath: SESSION_FILE_PATH,
-        clientId: 'whatsapp-client',
-    }),
+    authStrategy: new LocalAuth(),
     puppeteer: {
-        headless: true,
-        executablePath: process.env.CHROMIUM_PATH || undefined, // Adjust to use pre-installed Chromium
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-        ],
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        handleSIGINT: false, // Prevent Puppeteer from registering its own SIGINT handler
     },
 });
 
-
-// Event: QR Code received
+// QR Code Event
 client.on('qr', (qr) => {
-    console.log('[INFO] Scan the QR code below to authenticate WhatsApp:');
-    qrcode.generate(qr, { small: true }); // Display QR code in terminal
+    logger.info('QR Code received. Scan it with your WhatsApp app.');
 });
 
-// Event: Client is ready
+// Ready Event
 client.on('ready', () => {
-    console.log('[INFO] WhatsApp client is ready!');
+    logger.info('✅ WhatsApp client is ready!');
 });
 
-// Event: Client authenticated
-client.on('authenticated', () => {
-    console.log('[INFO] WhatsApp client authenticated successfully!');
-});
-
-// Event: Authentication failure
+// Authentication Failed Event
 client.on('auth_failure', (msg) => {
-    console.error('[ERROR] WhatsApp authentication failed:', msg);
+    logger.error('WhatsApp authentication failed:', msg);
 });
 
-// Event: Client disconnected
+// Disconnected Event
 client.on('disconnected', (reason) => {
-    console.log(`[INFO] WhatsApp client disconnected. Reason: ${reason}`);
-    console.log('[INFO] Reinitializing client...');
-    client.initialize();
+    logger.warn('WhatsApp client disconnected:', reason);
+    // Attempt to reconnect
+    logger.info('Reinitializing WhatsApp client after disconnect...');
+    client.initialize().catch((err) => {
+        logger.error('Failed to reinitialize after disconnect:', err);
+    });
 });
 
-// Event: Unexpected error
-client.on('error', (error) => {
-    console.error('[ERROR] An unexpected error occurred:', error);
-    console.log('[INFO] Attempting to reinitialize client...');
-    client.initialize();
+// Message Event
+client.on('message', async (msg) => {
+    const chatId = msg.from;
+    const message = msg.body.trim();
+
+    // Log incoming message with masked phone number for privacy
+    const maskedChatId = chatId.replace(/(\d{4})$/, '**');
+    logger.info(`Message received from ${maskedChatId}: ${message}`);
+
+    try {
+        // Respond to a simple "hello" message
+        if (message.toLowerCase() === 'hello') {
+            await client.sendMessage(chatId, 'Hi there! How can I help you?');
+            logger.info(`Replied to ${maskedChatId}`);
+        }
+    } catch (err) {
+        logger.error(`Error processing message from ${maskedChatId}:`, {
+            error: err.message,
+            stack: err.stack,
+        });
+
+        // Send user-friendly error message
+        const errorMessage = 'Sorry, something went wrong. Please try again.';
+        await client.sendMessage(chatId, errorMessage).catch((sendErr) => {
+            logger.error(`Failed to send error message to ${maskedChatId}:`, sendErr);
+        });
+    }
 });
 
-// Event: Loading progress
-client.on('loading_screen', (percent, message) => {
-    console.log(`[INFO] Loading WhatsApp: ${percent}% - ${message}`);
-});
+// Initialize WhatsApp Client with error handling
+const initializeWhatsApp = async () => {
+    try {
+        logger.info('Initializing WhatsApp client...');
+        await client.initialize();
+    } catch (err) {
+        logger.error('Failed to initialize WhatsApp client:', err);
+        throw err; // Re-throw to be handled by the calling code
+    }
+};
 
-// Initialize the client
-console.log('[INFO] Initializing WhatsApp client...');
-client.initialize();
+// Graceful shutdown handler
+const handleShutdown = async () => {
+    logger.info('Shutting down WhatsApp client...');
+    try {
+        await client.destroy();
+        logger.info('WhatsApp client shut down successfully');
+        process.exit(0);
+    } catch (err) {
+        logger.error('Error during shutdown:', err);
+        process.exit(1);
+    }
+};
 
-module.exports = { client };
+// Register shutdown handlers
+process.on('SIGTERM', handleShutdown);
+process.on('SIGINT', handleShutdown);
+
+module.exports = {
+    initializeWhatsApp,
+    handleShutdown, // Export for testing purposes
+};
