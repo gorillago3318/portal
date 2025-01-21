@@ -6,6 +6,7 @@ const path = require('path');
 // Ensure session directory exists
 const SESSION_FILE_PATH = path.join(__dirname, '../sessions');
 if (!fs.existsSync(SESSION_FILE_PATH)) {
+    console.log('[INFO] Creating session directory...');
     fs.mkdirSync(SESSION_FILE_PATH, { recursive: true });
 }
 
@@ -17,6 +18,7 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
+        executablePath: process.env.CHROMIUM_PATH || '/usr/bin/google-chrome', // Use pre-installed Chromium if on Render
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -46,16 +48,24 @@ client.on('authenticated', () => {
 });
 
 // Event: Authentication failure
-client.on('auth_failure', () => {
-    console.error('[ERROR] WhatsApp authentication failed. Please try again.');
+client.on('auth_failure', (msg) => {
+    console.error('[ERROR] WhatsApp authentication failed:', msg);
 });
 
 // Event: Client disconnected
 client.on('disconnected', (reason) => {
     console.log(`[INFO] WhatsApp client disconnected. Reason: ${reason}`);
+    console.log('[INFO] Reinitializing client...');
+    client.initialize();
+});
+
+// Event: Error
+client.on('error', (error) => {
+    console.error('[ERROR] An unexpected error occurred:', error);
 });
 
 // Initialize the client
+console.log('[INFO] Initializing WhatsApp client...');
 client.initialize();
 
 module.exports = { client };
