@@ -1,5 +1,5 @@
 // config/db.js
-require('dotenv').config(); // Add this line to load environment variables
+require('dotenv').config({ path: __dirname + '/../.env' });
 
 const { Sequelize } = require('sequelize');
 
