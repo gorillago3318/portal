@@ -90,7 +90,6 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// Referral redirect route
 app.get('/referral', async (req, res) => {
     console.log(`[DEBUG] Incoming request to /referral with query: ${JSON.stringify(req.query)}`); // Log request query
 
@@ -107,10 +106,10 @@ app.get('/referral', async (req, res) => {
         // Log database update attempt
         console.log(`[DEBUG] Attempting to update referral_code in the database for referral_code: ${referralCode}`);
 
-        // Update referral_code in the Users table
+        // Update referral_code in the Agents table
         const result = await Agent.update(
             { referral_code: referralCode },
-            { where: { phoneNumber: 'tempPhoneNumber' } } // Adjust to match your logic
+            { where: { phone: 'tempPhone' } } // Replace 'tempPhone' with actual logic if needed
         );
 
         // Check if the update was successful
