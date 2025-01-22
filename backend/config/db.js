@@ -3,6 +3,9 @@ require('dotenv').config({ path: __dirname + '/../.env' });
 
 const { Sequelize } = require('sequelize');
 
+// Debug log to check if .env is loaded correctly
+console.log('DATABASE_URL:', process.env.DATABASE_URL); // Add this log to see if the DATABASE_URL is being loaded
+
 if (!process.env.DATABASE_URL) {
     console.error('DATABASE_URL is not set in the environment variables.');
     process.exit(1);

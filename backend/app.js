@@ -16,6 +16,10 @@ const qrRoute = require('./routes/qrRoute');
 // Import Middleware
 const { authMiddleware } = require('./middleware/authMiddleware');
 
+// Debug: Check if .env is loaded
+console.log('[DEBUG] DATABASE_URL:', process.env.DATABASE_URL); // Log the DATABASE_URL
+console.log('[DEBUG] PORT:', process.env.PORT); // Log the PORT
+
 // Validate environment variables
 if (!process.env.DATABASE_URL || !process.env.PORT) {
     console.error('[ERROR] Missing required environment variables: DATABASE_URL and/or PORT');
@@ -143,7 +147,6 @@ app.listen(PORT, '0.0.0.0', async () => { // Bind to 0.0.0.0 for external access
         }
     }
 });
-
 
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
