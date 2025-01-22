@@ -90,6 +90,40 @@ app.get('/health', async (req, res) => {
     }
 });
 
+// Referral redirect route
+app.get('/referral', async (req, res) => {
+    const referralCode = req.query.referral_code; // Get referral_code from query string
+
+    if (!referralCode) {
+        console.error('[ERROR] Referral code is missing.');
+        return res.status(400).json({ error: 'Referral code is missing.' });
+    }
+
+    try {
+        // Update referral_code in the Users table
+        console.log(`[INFO] Logging referral code: ${referralCode}`);
+        const result = await Agent.update(
+            { referral_code: referralCode },
+            { where: { phoneNumber: 'tempPhoneNumber' } } // Adjust to match your logic
+        );
+
+        // Check if the update was successful
+        if (result[0] === 0) {
+            console.warn(`[WARN] No user found to update with referral code: ${referralCode}`);
+        } else {
+            console.log(`[INFO] Referral code ${referralCode} logged successfully.`);
+        }
+
+        // Redirect to WhatsApp bot
+        const whatsappBotUrl = 'https://wa.me/60167177813';
+        console.log(`[INFO] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
+        res.redirect(whatsappBotUrl);
+    } catch (error) {
+        console.error('[ERROR] Failed to log referral code:', error.message);
+        res.status(500).json({ error: 'Failed to log referral code.', details: error.message });
+    }
+});
+
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
