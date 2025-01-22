@@ -2,7 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { initializeWhatsApp } = require('./services/whatsappService');
 const morgan = require('morgan');
-require('dotenv').config({ path: '../.env' }); // Adjust the path based on your project structure
+require('dotenv').config({ path: __dirname + '/.env' }); // Use the relative path for the .env file in the same folder
 
 // Import Models
 const Lead = require('./models/lead');
