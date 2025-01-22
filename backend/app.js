@@ -125,7 +125,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-const PORT = process.env.PORT; // Render dynamically assigns the port
+const PORT = process.env.PORT || 4000; // Use port 4000 by default
 app.listen(PORT, async () => {
     console.log(`[INFO] Server is running on http://localhost:${PORT}`);
 
@@ -143,6 +143,7 @@ app.listen(PORT, async () => {
         }
     }
 });
+
 
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
