@@ -92,6 +92,8 @@ app.get('/health', async (req, res) => {
 
 // Referral redirect route
 app.get('/referral', async (req, res) => {
+    console.log(`[DEBUG] Incoming request to /referral with query: ${JSON.stringify(req.query)}`); // Log request query
+
     const referralCode = req.query.referral_code; // Get referral_code from query string
 
     if (!referralCode) {
@@ -99,15 +101,20 @@ app.get('/referral', async (req, res) => {
         return res.status(400).json({ error: 'Referral code is missing.' });
     }
 
+    console.log(`[DEBUG] Referral code received: ${referralCode}`); // Log the received referral code
+
     try {
+        // Log database update attempt
+        console.log(`[DEBUG] Attempting to update referral_code in the database for referral_code: ${referralCode}`);
+
         // Update referral_code in the Users table
-        console.log(`[INFO] Logging referral code: ${referralCode}`);
         const result = await Agent.update(
             { referral_code: referralCode },
             { where: { phoneNumber: 'tempPhoneNumber' } } // Adjust to match your logic
         );
 
         // Check if the update was successful
+        console.log(`[DEBUG] Database update result: ${JSON.stringify(result)}`);
         if (result[0] === 0) {
             console.warn(`[WARN] No user found to update with referral code: ${referralCode}`);
         } else {
@@ -116,7 +123,7 @@ app.get('/referral', async (req, res) => {
 
         // Redirect to WhatsApp bot
         const whatsappBotUrl = 'https://wa.me/60167177813';
-        console.log(`[INFO] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
+        console.log(`[DEBUG] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
         res.redirect(whatsappBotUrl);
     } catch (error) {
         console.error('[ERROR] Failed to log referral code:', error.message);
@@ -129,14 +136,13 @@ console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
 
-// Debugging: List registered routes only in development
-if (process.env.NODE_ENV === 'development') {
-    app._router.stack.forEach((middleware) => {
-        if (middleware.route) {
-            console.log(`[DEBUG] Registered route: ${middleware.route.path}`);
-        }
-    });
-}
+// Debugging: List registered routes
+console.log('[DEBUG] Listing all registered routes...');
+app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+        console.log(`[DEBUG] Registered route: ${middleware.route.path}`);
+    }
+});
 
 // Default 404 handler
 app.use((req, res) => {
