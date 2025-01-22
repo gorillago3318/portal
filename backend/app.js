@@ -2,7 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { initializeWhatsApp } = require('./services/whatsappService');
 const morgan = require('morgan');
-require('dotenv').config();
+require('dotenv').config({ path: '../.env' }); // Adjust the path based on your project structure
 
 // Import Models
 const Lead = require('./models/lead');
@@ -126,8 +126,8 @@ app.use((err, req, res, next) => {
 
 // Start the server
 const PORT = process.env.PORT || 4000; // Use port 4000 by default
-app.listen(PORT, async () => {
-    console.log(`[INFO] Server is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => { // Bind to 0.0.0.0 for external access
+    console.log(`[INFO] Server is running on http://0.0.0.0:${PORT}`);
 
     // Sync Database in development mode
     if (process.env.NODE_ENV !== 'production') {
