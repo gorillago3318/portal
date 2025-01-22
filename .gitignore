@@ -19,3 +19,5 @@ pids
 
 # Optional eslint cache
 .eslintcache
+# .gitignore file
+.wwebjs_auth/

@@ -1,2 +1,3 @@
-2025/01/21-14:25:15.565 6374 Creating DB C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Session Storage since it was missing.
-2025/01/21-14:25:15.572 6374 Reusing MANIFEST C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Session Storage/MANIFEST-000001
+2025/01/22-15:17:23.660 385c Reusing MANIFEST C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Session Storage/MANIFEST-000001
+2025/01/22-15:17:23.660 385c Recovering log #3
+2025/01/22-15:17:23.660 385c Reusing old log C:\Users\waiki\OneDrive\Desktop\portal\.wwebjs_auth\session\Default\Session Storage/000003.log 
