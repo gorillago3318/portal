@@ -1,6 +1,6 @@
 // models/tempReferral.js
 const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database'); // Adjust the path to your database config
+const sequelize = require('../config/db');
 
 const TempReferral = sequelize.define('TempReferral', {
     token: {
