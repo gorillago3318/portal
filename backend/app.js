@@ -2,11 +2,13 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { initializeWhatsApp } = require('./services/whatsappService');
 const morgan = require('morgan');
+const crypto = require('crypto');
 require('dotenv').config({ path: __dirname + '/.env' }); // Use the relative path for the .env file in the same folder
 
 // Import Models
 const Lead = require('./models/lead');
 const Agent = require('./models/agent');
+const TempReferral = require('./models/tempReferral');
 
 // Import Routes
 const leadsRouter = require('./routes/leads');
@@ -71,8 +73,8 @@ app.get('/health', async (req, res) => {
         await Lead.sequelize.authenticate();
         console.log('[DEBUG] Database authenticated successfully.');
 
-        console.log('[DEBUG] Checking Lead and Agent tables...');
-        await Promise.all([Lead.findOne(), Agent.findOne()]);
+        console.log('[DEBUG] Checking Lead, Agent, and TempReferral tables...');
+        await Promise.all([Lead.findOne(), Agent.findOne(), TempReferral.findOne()]);
 
         const dbLatencyEnd = Date.now();
         healthCheck.dbLatency = `${dbLatencyEnd - dbLatencyStart}ms`;
@@ -90,10 +92,15 @@ app.get('/health', async (req, res) => {
     }
 });
 
+// Generate a secure token for the referral code
+function generateReferralToken(referralCode) {
+    return crypto.createHash('sha256').update(referralCode + Date.now()).digest('hex');
+}
+
 app.get('/referral', async (req, res) => {
     console.log(`[DEBUG] Incoming request to /referral with query: ${JSON.stringify(req.query)}`); // Log request query
 
-    const referralCode = req.query.referral_code; // Get referral_code from query string
+    const referralCode = req.query.referral_code;
 
     if (!referralCode) {
         console.error('[ERROR] Referral code is missing.');
@@ -103,30 +110,32 @@ app.get('/referral', async (req, res) => {
     console.log(`[DEBUG] Referral code received: ${referralCode}`); // Log the received referral code
 
     try {
-        // Log database update attempt
-        console.log(`[DEBUG] Attempting to update referral_code in the database for referral_code: ${referralCode}`);
-
-        // Update referral_code in the Agents table
-        const result = await Agent.update(
-            { referral_code: referralCode },
-            { where: { phone: 'tempPhone' } } // Replace 'tempPhone' with actual logic if needed
-        );
-
-        // Check if the update was successful
-        console.log(`[DEBUG] Database update result: ${JSON.stringify(result)}`);
-        if (result[0] === 0) {
-            console.warn(`[WARN] No user found to update with referral code: ${referralCode}`);
-        } else {
-            console.log(`[INFO] Referral code ${referralCode} logged successfully.`);
+        // Check if the referral code already exists in TempReferral
+        const existingReferral = await TempReferral.findOne({ where: { referral_code: referralCode } });
+        if (existingReferral) {
+            console.log('[DEBUG] Existing referral token found:', existingReferral.token);
+            return res.status(200).json({ message: 'Referral token already exists.', token: existingReferral.token });
         }
 
-        // Redirect to WhatsApp bot
-        const whatsappBotUrl = 'https://wa.me/60167177813';
+        // Generate a token for this referral code
+        const token = generateReferralToken(referralCode);
+
+        // Store the token and referral code in the TempReferral table
+        await TempReferral.create({
+            token,
+            referral_code: referralCode,
+            expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15-minute expiration
+        });
+
+        console.log(`[INFO] Referral token generated and saved: ${token}`);
+
+        // Redirect user to WhatsApp bot with token
+        const whatsappBotUrl = `https://wa.me/60167177813?text=ref:${token}`;
         console.log(`[DEBUG] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
         res.redirect(whatsappBotUrl);
     } catch (error) {
-        console.error('[ERROR] Failed to log referral code:', error.message);
-        res.status(500).json({ error: 'Failed to log referral code.', details: error.message });
+        console.error('[ERROR] Failed to process referral:', error.message);
+        res.status(500).json({ error: 'Failed to process referral.', details: error.message });
     }
 });
 
@@ -134,6 +143,10 @@ app.get('/referral', async (req, res) => {
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
+
+// TempReferral Route
+const tempReferralRouter = require('./routes/tempReferral'); // Adjust path if needed
+app.use('/api/temp-referral', tempReferralRouter);
 
 // Debugging: List registered routes
 console.log('[DEBUG] Listing all registered routes...');
@@ -179,6 +192,7 @@ app.listen(PORT, '0.0.0.0', async () => { // Bind to 0.0.0.0 for external access
             await Promise.all([
                 Lead.sync({ alter: true }),
                 Agent.sync({ alter: true }),
+                TempReferral.sync({ alter: true }), // Ensure TempReferral is synced
             ]);
             console.log('[INFO] Database synced successfully.');
         } catch (error) {
