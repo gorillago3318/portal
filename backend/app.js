@@ -111,10 +111,13 @@ app.get('/referral', async (req, res) => {
 
     try {
         // Check if the referral code already exists in TempReferral
-        const existingReferral = await TempReferral.findOne({ where: { referral_code: referralCode } });
+        let existingReferral = await TempReferral.findOne({ where: { referral_code: referralCode } });
+
         if (existingReferral) {
-            console.log('[DEBUG] Existing referral token found:', existingReferral.token);
-            return res.status(200).json({ message: 'Referral token already exists.', token: existingReferral.token });
+            console.log(`[DEBUG] Existing referral token found: ${existingReferral.token}`);
+            const whatsappBotUrl = `https://wa.me/60167177813?text=ref:${existingReferral.token}`;
+            console.log(`[DEBUG] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
+            return res.redirect(whatsappBotUrl); // Redirect to WhatsApp bot with existing token
         }
 
         // Generate a token for this referral code
@@ -138,6 +141,7 @@ app.get('/referral', async (req, res) => {
         res.status(500).json({ error: 'Failed to process referral.', details: error.message });
     }
 });
+
 
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
