@@ -135,7 +135,7 @@ app.get('/referral', async (req, res) => {
 
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
-app.use('/api/leads', authMiddleware, leadsRouter);
+app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
 
 // TempReferral Route
