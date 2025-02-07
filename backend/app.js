@@ -98,54 +98,43 @@ function generateReferralToken(referralCode) {
 }
 
 app.get('/referral', async (req, res) => {
-    console.log(`[DEBUG] Incoming request to /referral with query: ${JSON.stringify(req.query)}`); // Log request query
-
     const referralCode = req.query.referral_code;
 
     if (!referralCode) {
-        console.error('[ERROR] Referral code is missing.');
         return res.status(400).json({ error: 'Referral code is missing.' });
     }
 
-    console.log(`[DEBUG] Referral code received: ${referralCode}`); // Log the received referral code
-
     try {
-        // Check if the referral code already exists in TempReferral
-        let existingReferral = await TempReferral.findOne({ where: { referral_code: referralCode } });
+        let token;
+        const existingReferral = await TempReferral.findOne({ where: { referral_code: referralCode } });
 
         if (existingReferral) {
-            console.log(`[DEBUG] Existing referral token found: ${existingReferral.token}`);
-            const whatsappBotUrl = `https://wa.me/60167177813?text=ref:${existingReferral.token}`;
-            console.log(`[DEBUG] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
-            return res.redirect(whatsappBotUrl); // Redirect to WhatsApp bot with existing token
+            token = existingReferral.token;
+        } else {
+            token = generateReferralToken(referralCode);
+            await TempReferral.create({
+                token,
+                referral_code: referralCode,
+                expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15-minute expiration
+            });
         }
 
-        // Generate a token for this referral code
-        const token = generateReferralToken(referralCode);
-
-        // Store the token and referral code in the TempReferral table
-        await TempReferral.create({
-            token,
-            referral_code: referralCode,
-            expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15-minute expiration
-        });
-
-        console.log(`[INFO] Referral token generated and saved: ${token}`);
-
-        // Redirect user to WhatsApp bot with token
-        const whatsappBotUrl = `https://wa.me/60167177813?text=ref:${token}`;
-        console.log(`[DEBUG] Redirecting to WhatsApp bot: ${whatsappBotUrl}`);
+        // Redirect to WhatsApp with token embedded in session
+        const whatsappBotUrl = `https://wa.me/60167177813?text=referral_start`;
+        req.session.referral_code = referralCode; // Save referral code in session
+        console.log(`[INFO] Referral code stored in session: ${referralCode}`);
         res.redirect(whatsappBotUrl);
     } catch (error) {
         console.error('[ERROR] Failed to process referral:', error.message);
-        res.status(500).json({ error: 'Failed to process referral.', details: error.message });
+        res.status(500).json({ error: 'Failed to process referral.' });
     }
 });
 
 
+
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
-app.use('/api/leads', leadsRouter);
+app.use('/api/leads', authMiddleware, leadsRouter);
 app.use('/api/agents', agentsRouter);
 
 // TempReferral Route
