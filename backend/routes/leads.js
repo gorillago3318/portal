@@ -80,41 +80,34 @@ router.post('/', async (req, res) => {
 
   try {
       let parentAgentId = null;
-      let referrerId = null;  // Variable to store the referrer_id
+      let referrerId = null;
 
+      // Check if the phone number belongs to an agent
+      const agent = await Agent.findOne({ where: { phone } });
+      if (!agent) {
+          return res.status(403).json({ error: 'Forbidden: Only registered agents can submit leads.' });
+      }
+
+      // Handle referral logic
       if (referrer_code) {
-          // Find the referrer using the referral code
           const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
           if (!referrer) {
               return res.status(404).json({ error: 'Referrer not found' });
           }
-
-          // If a parent_referrer_id exists, assign the lead to the parent; otherwise, to the referrer
           parentAgentId = referrer.parent_referrer_id || referrer.id;
-          if (!parentAgentId) {
-              return res.status(404).json({ error: 'Parent agent not found' });
-          }
-
-          // Track the referrer_id in case we need it for commissions or other purposes
           referrerId = referrer.id;
       } else {
-          // If no referrer_code, try assigning directly by phone
-          const directAgent = await Agent.findOne({ where: { phone } });
-          if (!directAgent) {
-              return res.status(404).json({ error: 'Agent not found' });
-          }
-
-          parentAgentId = directAgent.id;
+          parentAgentId = agent.id; // Assign the lead to the agent
       }
 
-      // Create the new Lead and track the referrer_id
+      // Create the new Lead
       const newLead = await Lead.create({
           name,
           phone,
           referrer_code,
           loan_amount,
           assigned_agent_id: parentAgentId,
-          referrer_id: referrerId,  // Save the referrer_id in the lead
+          referrer_id: referrerId,
       });
 
       res.status(201).json({
@@ -126,6 +119,7 @@ router.post('/', async (req, res) => {
       res.status(500).json({ error: 'Error creating lead', details: error.message });
   }
 });
+
 
 /**
  * Route: Get Leads with Pagination and Filters
