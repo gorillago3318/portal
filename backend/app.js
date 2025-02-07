@@ -30,7 +30,8 @@ if (!process.env.DATABASE_URL || !process.env.PORT) {
 
 // Initialize Express app
 const app = express();
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // Handles URL-encoded data
 
 // Register the authRouter first
 const authRouter = require('./routes/auth'); // Adjust path if needed
