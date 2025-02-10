@@ -76,7 +76,7 @@ const sendError = (res, status, message, details = null) => {
  */
 router.post('/', async (req, res) => {
   console.log('[DEBUG] /api/leads POST route hit');
-  const { name, phone, referrer_code, loan_amount } = req.body;
+  const { name, phone, referrer_code, loan_amount, estimated_savings, monthly_savings, yearly_savings, new_monthly_repayment, bankname } = req.body;
 
   try {
       let parentAgentId = null;
@@ -100,14 +100,21 @@ router.post('/', async (req, res) => {
           parentAgentId = agent.id; // Assign the lead to the agent
       }
 
-      // Create the new Lead
+      // Create the new Lead with extra fields
       const newLead = await Lead.create({
           name,
           phone,
           referrer_code,
           loan_amount,
+          estimated_savings,
+          monthly_savings,        // new field (if your model has been updated)
+          yearly_savings,         // new field
+          new_monthly_repayment,  // new field
+          bankname,               // new field
           assigned_agent_id: parentAgentId,
           referrer_id: referrerId,
+          source: 'whatsapp',
+          status: 'New'
       });
 
       res.status(201).json({
@@ -119,7 +126,6 @@ router.post('/', async (req, res) => {
       res.status(500).json({ error: 'Error creating lead', details: error.message });
   }
 });
-
 
 /**
  * Route: Get Leads with Pagination and Filters
