@@ -8,7 +8,8 @@ require('dotenv').config({ path: __dirname + '/.env' }); // Use the relative pat
 // Import Models
 const Lead = require('./models/lead');
 const Agent = require('./models/agent');
-const TempReferral = require('./models/tempReferral');
+// Removed TempReferral model as it's no longer needed
+// const TempReferral = require('./models/tempReferral');
 
 // Import Routes
 const leadsRouter = require('./routes/leads');
@@ -60,7 +61,7 @@ app.use((req, res, next) => {
     next(); // Pass control to the next middleware/route
 });
 
-// Health-check route
+// Health-check route (removed TempReferral check)
 app.get('/health', async (req, res) => {
     console.log('[INFO] GET /health - Health check route hit');
     const healthCheck = {
@@ -75,8 +76,8 @@ app.get('/health', async (req, res) => {
         await Lead.sequelize.authenticate();
         console.log('[DEBUG] Database authenticated successfully.');
 
-        console.log('[DEBUG] Checking Lead, Agent, and TempReferral tables...');
-        await Promise.all([Lead.findOne(), Agent.findOne(), TempReferral.findOne()]);
+        console.log('[DEBUG] Checking Lead and Agent tables...');
+        await Promise.all([Lead.findOne(), Agent.findOne()]);
 
         const dbLatencyEnd = Date.now();
         healthCheck.dbLatency = `${dbLatencyEnd - dbLatencyStart}ms`;
@@ -94,52 +95,16 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// Generate a secure token for the referral code
-function generateReferralToken(referralCode) {
-    return crypto.createHash('sha256').update(referralCode + Date.now()).digest('hex');
-}
-
-app.get('/referral', async (req, res) => {
-    const referralCode = req.query.referral_code;
-
-    if (!referralCode) {
-        return res.status(400).json({ error: 'Referral code is missing.' });
-    }
-
-    try {
-        let token;
-        const existingReferral = await TempReferral.findOne({ where: { referral_code: referralCode } });
-
-        if (existingReferral) {
-            token = existingReferral.token;
-        } else {
-            token = generateReferralToken(referralCode);
-            await TempReferral.create({
-                token,
-                referral_code: referralCode,
-                expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15-minute expiration
-            });
-        }
-
-        // Redirect to WhatsApp with token embedded in session
-        const whatsappBotUrl = `https://wa.me/60167177813?text=referral_start`;
-        req.session.referral_code = referralCode; // Save referral code in session
-        console.log(`[INFO] Referral code stored in session: ${referralCode}`);
-        res.redirect(whatsappBotUrl);
-    } catch (error) {
-        console.error('[ERROR] Failed to process referral:', error.message);
-        res.status(500).json({ error: 'Failed to process referral.' });
-    }
-});
+// Removed /referral route because TempReferral/bridge is no longer used
 
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
 
-// TempReferral Route
-const tempReferralRouter = require('./routes/tempReferral'); // Adjust path if needed
-app.use('/api/temp-referral', tempReferralRouter);
+// Removed TempReferral route registration
+// const tempReferralRouter = require('./routes/tempReferral');
+// app.use('/api/temp-referral', tempReferralRouter);
 
 // Debugging: List registered routes
 console.log('[DEBUG] Listing all registered routes...');
@@ -188,8 +153,8 @@ app.listen(PORT, '0.0.0.0', async () => { // Bind to 0.0.0.0 for external access
             console.log('[DEBUG] Syncing database...');
             await Promise.all([
                 Lead.sync({ alter: true }),
-                Agent.sync({ alter: true }),
-                TempReferral.sync({ alter: true }), // Ensure TempReferral is synced
+                Agent.sync({ alter: true })
+                // Removed TempReferral sync
             ]);
             console.log('[INFO] Database synced successfully.');
         } catch (error) {
