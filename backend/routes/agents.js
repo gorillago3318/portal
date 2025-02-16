@@ -41,7 +41,7 @@ const sendWhatsAppMessage = async (phone, message) => {
   }
 };
 
-// Helper function to send a response
+// Helper function to send a standardized response
 const sendResponse = (res, status, message, data = null, error = null) => {
   const response = { message, data };
   if (error) response.error = error;
@@ -133,7 +133,11 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-// Admin creation route (restricted to existing Admins)
+// ------------------------------------------------------
+// 2) PROTECTED ROUTES (Require authMiddleware & Admin role)
+// ------------------------------------------------------
+
+// Admin creation route
 router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { name, phone, email, location, status } = req.body;
 
@@ -156,12 +160,12 @@ router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, r
       location,
       role: 'Admin', // Set the role explicitly
       status: status || 'Active', // Default status is Active
-      password: hashedPassword, // Save the hashed password in the password column
+      password: hashedPassword, // Save the hashed password
     });
 
     res.status(201).json({
       message: 'Admin created successfully',
-      temp_password: tempPassword, // Provide the plain temp password for the admin
+      temp_password: tempPassword,
     });
   } catch (error) {
     console.error('[ERROR] Error creating admin:', error.message);
@@ -169,7 +173,7 @@ router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, r
   }
 });
 
-// ------------------- 1) ADMIN CREATES A NEW AGENT -------------------
+// Admin creates a new agent
 router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { name, phone, email, location, bank_name, account_number, status } = req.body;
 
@@ -184,7 +188,7 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // Create the agent (store hashedPassword in 'password')
+    // Create the agent
     const newAgent = await Agent.create({
       name,
       phone,
@@ -194,7 +198,7 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
       account_number,
       role: 'Agent', // Default role is Agent
       status: status || 'Pending', // Default status is Pending
-      password: hashedPassword, // Save hashed password in the 'password' field
+      password: hashedPassword,
     });
 
     res.status(201).json({
@@ -205,7 +209,7 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
         phone: newAgent.phone,
         email: newAgent.email,
         status: newAgent.status,
-        referral_code: newAgent.referral_code, // Include the referral code
+        referral_code: newAgent.referral_code,
       },
       temp_password: tempPassword,
     });
@@ -215,7 +219,11 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
   }
 });
 
-// ------------------- 2) SELF-REGISTRATION (Pending Status) -------------------
+// ------------------------------------------------------
+// 3) PUBLIC ROUTES for Registration
+// ------------------------------------------------------
+
+// Self-registration (agent)
 router.post('/register', async (req, res) => {
   const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
 
@@ -242,7 +250,7 @@ router.post('/register', async (req, res) => {
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // Create the new Agent (store hashedPassword in 'password')
+    // Create the new Agent
     const newAgent = await Agent.create({
       name,
       phone,
@@ -252,7 +260,7 @@ router.post('/register', async (req, res) => {
       account_number,
       status: 'Pending', // Default to Pending
       parent_referrer_id,
-      password: hashedPassword, // <-- store in password, not temp_password
+      password: hashedPassword,
     });
 
     sendResponse(res, 201, 'Registration successful. Awaiting approval.', {
@@ -262,7 +270,7 @@ router.post('/register', async (req, res) => {
       email: newAgent.email,
       status: newAgent.status,
       referral_code: newAgent.referral_code,
-      temp_password: tempPassword, // Provide plain temp password in response
+      temp_password: tempPassword,
     });
   } catch (error) {
     console.error('[ERROR] Error registering agent:', error.message);
@@ -270,7 +278,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// ------------------- 3) REGISTER A REFERRER (Same style) -------------------
+// Register a referrer
 router.post('/register-referrer', async (req, res) => {
   const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
 
@@ -293,7 +301,7 @@ router.post('/register-referrer', async (req, res) => {
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    // Create the Referrer (store hashedPassword in 'password')
+    // Create the Referrer
     const newReferrer = await Agent.create({
       name,
       phone,
@@ -304,7 +312,7 @@ router.post('/register-referrer', async (req, res) => {
       role: 'Referrer',
       parent_referrer_id: referrer.id,
       status: 'Active',
-      password: hashedPassword, // <-- store in password
+      password: hashedPassword,
     });
 
     sendResponse(res, 201, 'Referrer registered successfully', {
@@ -314,7 +322,7 @@ router.post('/register-referrer', async (req, res) => {
       email: newReferrer.email,
       status: newReferrer.status,
       referral_code: newReferrer.referral_code,
-      temp_password: tempPassword, // Provide plain temp password
+      temp_password: tempPassword,
     });
   } catch (error) {
     console.error('[ERROR] Error registering referrer:', error.message);
@@ -337,7 +345,11 @@ router.get('/:id/referral-link', async (req, res) => {
   }
 });
 
-// Fetch Agents
+// ------------------------------------------------------
+// 4) FETCHING & UPDATING AGENTS
+// ------------------------------------------------------
+
+// Fetch all agents
 router.get('/', async (req, res) => {
   try {
     const agents = await Agent.findAll();
@@ -347,7 +359,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get Pending Agents
+// Get pending agents
 router.get('/pending', async (req, res) => {
   try {
     const pendingAgents = await Agent.findAll({ where: { status: 'Pending' } });
@@ -357,8 +369,8 @@ router.get('/pending', async (req, res) => {
   }
 });
 
-// Approve/Reject Agent
-router.patch('/:id/approval', checkRole(['Admin']), async (req, res) => {
+// Approve/Reject Agent (only for pending agents)
+router.patch('/:id/approval', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -371,8 +383,8 @@ router.patch('/:id/approval', checkRole(['Admin']), async (req, res) => {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
 
-    // Only 'Pending' agents can be approved or rejected
-    if (agent.status !== 'Pending') {
+    // Only allow approval if agent is still pending (case-insensitive check)
+    if (agent.status.toLowerCase() !== 'pending') {
       return sendResponse(res, 400, 'Only "Pending" agents can be approved or rejected.');
     }
 
@@ -386,9 +398,8 @@ router.patch('/:id/approval', checkRole(['Admin']), async (req, res) => {
   }
 });
 
-// Combined Update Agent Status (Active <-> Inactive)
-// This endpoint will update the status for both Agents and Referrers.
-router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
+// Combined Update Agent Status (Active <-> Inactive) for both agents and referrers
+router.patch('/:id/status', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
@@ -405,7 +416,6 @@ router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
       return sendResponse(res, 400, `Agent is already ${status}.`);
     }
 
-    // For referrers, you might add additional checks if needed.
     agent.status = status;
     await agent.save();
 
@@ -416,7 +426,7 @@ router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
 });
 
 // Update Agent Details
-router.patch('/:id', checkRole(['Admin', 'Agent']), async (req, res) => {
+router.patch('/:id', authMiddleware, checkRole(['Admin', 'Agent']), async (req, res) => {
   const { id } = req.params;
   const { name, phone, email, location, bank_name, account_number } = req.body;
 
@@ -446,7 +456,7 @@ router.patch('/:id', checkRole(['Admin', 'Agent']), async (req, res) => {
 });
 
 // Delete an Agent
-router.delete('/:id', checkRole(['Admin']), async (req, res) => {
+router.delete('/:id', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
 
   try {
