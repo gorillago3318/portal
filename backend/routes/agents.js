@@ -25,9 +25,7 @@ const sendWhatsAppMessage = async (phone, message) => {
     messaging_product: "whatsapp",
     to: phone,
     type: "text",
-    text: {
-      body: message
-    }
+    text: { body: message }
   };
 
   try {
@@ -199,7 +197,6 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
       password: hashedPassword, // Save hashed password in the 'password' field
     });
 
-    // Return same style response
     res.status(201).json({
       message: 'Agent created successfully',
       agent: {
@@ -258,7 +255,6 @@ router.post('/register', async (req, res) => {
       password: hashedPassword, // <-- store in password, not temp_password
     });
 
-    // Return similar style response
     sendResponse(res, 201, 'Registration successful. Awaiting approval.', {
       id: newAgent.id,
       name: newAgent.name,
@@ -311,7 +307,6 @@ router.post('/register-referrer', async (req, res) => {
       password: hashedPassword, // <-- store in password
     });
 
-    // Return same style response as create-agent
     sendResponse(res, 201, 'Referrer registered successfully', {
       id: newReferrer.id,
       name: newReferrer.name,
@@ -391,7 +386,8 @@ router.patch('/:id/approval', checkRole(['Admin']), async (req, res) => {
   }
 });
 
-// Update Agent Status (Active <-> Inactive)
+// Combined Update Agent Status (Active <-> Inactive)
+// This endpoint will update the status for both Agents and Referrers.
 router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -405,53 +401,17 @@ router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
 
-    // If the status is already the same, return an error
     if (agent.status === status) {
       return sendResponse(res, 400, `Agent is already ${status}.`);
     }
 
-    // Only allow switching between Active/Inactive
-    if (['Active', 'Inactive'].includes(agent.status)) {
-      agent.status = status;  // Change to Active or Inactive
-    } else {
-      return sendResponse(res, 400, 'Status can only be updated between "Active" and "Inactive".');
-    }
-
+    // For referrers, you might add additional checks if needed.
+    agent.status = status;
     await agent.save();
 
     sendResponse(res, 200, `Agent status updated to: ${status}`, agent);
   } catch (error) {
     sendResponse(res, 500, 'Error updating agent status', null, error.message);
-  }
-});
-
-// Deactivate Referrer (Admin only)
-router.patch('/:id/status', checkRole(['Admin']), async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body;
-
-  // Only allow 'Inactive' or 'Active' as valid status for referrers
-  if (!['Active', 'Inactive'].includes(status)) {
-    return sendResponse(res, 400, 'Invalid status. Allowed values are "Active" or "Inactive".');
-  }
-
-  try {
-    const referrer = await Agent.findByPk(id);
-    if (!referrer) {
-      return sendResponse(res, 404, 'Referrer not found');
-    }
-
-    // Ensure the agent is a referrer
-    if (referrer.role !== 'Referrer') {
-      return sendResponse(res, 400, 'Only referrers can have their status updated');
-    }
-
-    referrer.status = status;
-    await referrer.save();
-
-    sendResponse(res, 200, `Referrer status updated to: ${status}`, referrer);
-  } catch (error) {
-    sendResponse(res, 500, 'Error updating referrer status', null, error.message);
   }
 });
 
