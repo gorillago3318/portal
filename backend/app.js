@@ -13,7 +13,8 @@ const TempReferral = require('./models/tempReferral');
 // Import Routes
 const leadsRouter = require('./routes/leads');
 const agentsRouter = require('./routes/agents');
-const qrRoute = require('./routes/qrRoute');
+// QR Route is disabled; do not import or mount it
+// const qrRoute = require('./routes/qrRoute');
 
 // Import Middleware
 const { authMiddleware } = require('./middleware/authMiddleware');
@@ -37,8 +38,8 @@ app.use(express.urlencoded({ extended: true })); // Handles URL-encoded data
 const authRouter = require('./routes/auth'); // Adjust path if needed
 app.use('/api/auth', authRouter); // Register the authRouter before applying authMiddleware
 
-// Mount QR Code Route
-app.use('/', qrRoute); // Root path for QR code handling
+// Disable QR Code Route by not mounting it
+// app.use('/', qrRoute);
 
 // Removed WhatsApp initialization
 // initializeWhatsApp().catch((err) => {
