@@ -1,6 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const { initializeWhatsApp } = require('./services/whatsappService');
+// Removed WhatsApp-related code: const { initializeWhatsApp } = require('./services/whatsappService');
 const morgan = require('morgan');
 const crypto = require('crypto');
 require('dotenv').config({ path: __dirname + '/.env' }); // Use the relative path for the .env file in the same folder
@@ -40,11 +40,11 @@ app.use('/api/auth', authRouter); // Register the authRouter before applying aut
 // Mount QR Code Route
 app.use('/', qrRoute); // Root path for QR code handling
 
-// Initialize WhatsApp
-initializeWhatsApp().catch((err) => {
-    console.error('[ERROR] Failed to initialize WhatsApp:', err.message);
-    process.exit(1);
-});
+// Removed WhatsApp initialization
+// initializeWhatsApp().catch((err) => {
+//     console.error('[ERROR] Failed to initialize WhatsApp:', err.message);
+//     process.exit(1);
+// });
 
 // Apply Global Middleware
 app.use('/api/protected-route', authMiddleware); // Example protected route
@@ -131,8 +131,6 @@ app.get('/referral', async (req, res) => {
     }
 });
 
-
-
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
@@ -150,8 +148,12 @@ app._router.stack.forEach((middleware) => {
     }
 });
 
-// Default 404 handler
+// Default 404 handler with exception for /metrics
 app.use((req, res) => {
+    if (req.originalUrl === '/metrics') {
+        // Silently handle /metrics requests without logging an error
+        return res.status(200).send('');
+    }
     console.error(`[ERROR] Invalid route accessed: ${req.method} ${req.originalUrl}`);
     res.status(404).json({
         error: 'Route not found',
