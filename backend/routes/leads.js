@@ -145,25 +145,43 @@ router.post('/', async (req, res) => {
 
     console.log('[DEBUG] New lead created:', newLead.toJSON());
 
-    // If an assigned agent exists, attempt to send a WhatsApp message.
+    // If an assigned agent exists, send a detailed WhatsApp message.
     if (assigned_agent_id) {
       try {
         const agent = await Agent.findByPk(assigned_agent_id);
         if (agent && agent.phone) {
           const agentPhone = agent.phone; // Ensure this is in E.164 format.
+          
+          // Lookup referrer name if available.
+          let referrerName = referrer_code;
+          if (referrer_id) {
+            const refAgent = await Agent.findByPk(referrer_id);
+            if (refAgent && refAgent.name) {
+              referrerName = refAgent.name;
+            }
+          }
+          
+          // Build a more detailed summary message for the agent.
           const summaryMessage = `
 🚨 New Lead Assigned 🚨
 
-Customer Details:
+📋 Customer Details:
 - Name: ${name}
 - Contact: ${phone}
 
-Loan Details:
+💰 Loan Information:
 - Loan Amount: ${formatCurrency(loan_amount)}
 - New Monthly Repayment: ${formatCurrency(new_monthly_repayment)}
+- Bank: ${bankname}
 
-Referrer: ${referrer_code}
+📈 Savings Analysis:
+- Estimated Savings: ${formatCurrency(estimated_savings)}
+- Monthly Savings: ${formatCurrency(monthly_savings)}
+- Yearly Savings: ${formatCurrency(yearly_savings)}
+
+Referrer: ${referrer_code} (${referrerName})
           `.trim();
+          
           await sendWhatsappMessageToAgent(agentPhone, summaryMessage);
         } else {
           console.warn('[WARN] Assigned agent not found or missing phone for agent id:', assigned_agent_id);
