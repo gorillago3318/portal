@@ -8,8 +8,7 @@ require('dotenv').config({ path: __dirname + '/.env' }); // Use the relative pat
 // Import Models
 const Lead = require('./models/lead');
 const Agent = require('./models/agent');
-// Removed TempReferral model as it's no longer needed
-// const TempReferral = require('./models/tempReferral');
+// TempReferral model removed
 
 // Import Routes
 const leadsRouter = require('./routes/leads');
@@ -21,8 +20,8 @@ const agentsRouter = require('./routes/agents');
 const { authMiddleware } = require('./middleware/authMiddleware');
 
 // Debug: Check if .env is loaded
-console.log('[DEBUG] DATABASE_URL:', process.env.DATABASE_URL); // Log the DATABASE_URL
-console.log('[DEBUG] PORT:', process.env.PORT); // Log the PORT
+console.log('[DEBUG] DATABASE_URL:', process.env.DATABASE_URL);
+console.log('[DEBUG] PORT:', process.env.PORT);
 
 // Validate environment variables
 if (!process.env.DATABASE_URL || !process.env.PORT) {
@@ -55,13 +54,16 @@ app.use('/api/protected-route', authMiddleware); // Example protected route
 const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
 app.use(morgan(morganFormat)); // Logging
 
-// Debugging: Log incoming requests
+// Debugging: Log incoming requests, with no extra logging for /metrics
 app.use((req, res, next) => {
+    if (req.originalUrl === '/metrics' || req.headers['user-agent'] === 'vm_promscrape') {
+        return next();
+    }
     console.log(`[DEBUG] Incoming Request: ${req.method} ${req.originalUrl}`);
-    next(); // Pass control to the next middleware/route
+    next();
 });
 
-// Health-check route (removed TempReferral check)
+// Health-check route (TempReferral removed)
 app.get('/health', async (req, res) => {
     console.log('[INFO] GET /health - Health check route hit');
     const healthCheck = {
@@ -95,16 +97,36 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// Removed /referral route because TempReferral/bridge is no longer used
+// /referral route updated to work without TempReferral
+app.get('/referral', async (req, res) => {
+    const referralCode = req.query.referral_code;
+    if (!referralCode) {
+        return res.status(400).json({ error: 'Referral code is missing.' });
+    }
+    try {
+        // Generate a referral token (for logging or tracking purposes)
+        const token = crypto.createHash('sha256').update(referralCode + Date.now()).digest('hex');
+        console.log(`[DEBUG] Generated referral token: ${token}`);
+
+        // Ensure session exists and store the referral code
+        req.session = req.session || {}; // Create session object if not present
+        req.session.referral_code = referralCode;
+        console.log(`[INFO] Referral code stored in session: ${referralCode}`);
+
+        // Redirect to WhatsApp URL (you can append the token if needed)
+        const whatsappBotUrl = `https://wa.me/60167177813?text=referral_start`;
+        res.redirect(whatsappBotUrl);
+    } catch (error) {
+        console.error('[ERROR] Failed to process referral:', error.message);
+        res.status(500).json({ error: 'Failed to process referral.' });
+    }
+});
 
 // Register API Routes
 console.log('[DEBUG] Registering API routes...');
 app.use('/api/leads', leadsRouter);
 app.use('/api/agents', agentsRouter);
-
 // Removed TempReferral route registration
-// const tempReferralRouter = require('./routes/tempReferral');
-// app.use('/api/temp-referral', tempReferralRouter);
 
 // Debugging: List registered routes
 console.log('[DEBUG] Listing all registered routes...');
@@ -143,10 +165,9 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-const PORT = process.env.PORT || 4000; // Use port 4000 by default
-app.listen(PORT, '0.0.0.0', async () => { // Bind to 0.0.0.0 for external access
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, '0.0.0.0', async () => {
     console.log(`[INFO] Server is running on http://0.0.0.0:${PORT}`);
-
     // Sync Database in development mode
     if (process.env.NODE_ENV !== 'production') {
         try {
@@ -154,7 +175,6 @@ app.listen(PORT, '0.0.0.0', async () => { // Bind to 0.0.0.0 for external access
             await Promise.all([
                 Lead.sync({ alter: true }),
                 Agent.sync({ alter: true })
-                // Removed TempReferral sync
             ]);
             console.log('[INFO] Database synced successfully.');
         } catch (error) {
