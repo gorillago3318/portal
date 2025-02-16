@@ -22,7 +22,8 @@ const authMiddleware = (req, res, next) => {
 
 const checkRole = (allowedRoles) => {
     return (req, res, next) => {
-        console.log('[DEBUG] Checking user role:', req.user?.role);
+        console.log('[DEBUG] Allowed roles:', allowedRoles);
+        console.log('[DEBUG] User role:', req.user?.role);
 
         if (!req.user || !allowedRoles.includes(req.user.role)) {
             console.log('[DEBUG] Role not authorized:', req.user?.role);
@@ -33,7 +34,6 @@ const checkRole = (allowedRoles) => {
         next();
     };
 };
-
 module.exports = {
     authMiddleware,
     checkRole,
