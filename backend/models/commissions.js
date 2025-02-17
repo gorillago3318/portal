@@ -1,4 +1,3 @@
-// models/commissions.js
 const { Model, DataTypes } = require('sequelize');
 
 class Commission extends Model {
@@ -88,7 +87,7 @@ class Commission extends Model {
         modelName: 'Commission',
         tableName: 'Commissions',
         timestamps: true,
-        paranoid: true, // Soft deletes
+        paranoid: true,
         indexes: [
           { fields: ['lead_id'] },
           { fields: ['agent_id'] },
@@ -98,7 +97,7 @@ class Commission extends Model {
         hooks: {
           beforeValidate: (commission) => {
             if (!commission.max_commission) {
-              // Example default: 0.3% of loan_amount
+              // Default: 0.3% of loan_amount
               commission.max_commission = commission.loan_amount * 0.003;
             }
           },
@@ -110,7 +109,21 @@ class Commission extends Model {
   }
 
   static associate(models) {
-    // e.g. Commission.belongsTo(models.Lead, { foreignKey: 'lead_id', as: 'lead' });
+    // Each commission belongs to a lead.
+    Commission.belongsTo(models.Lead, {
+      foreignKey: 'lead_id',
+      as: 'lead',
+    });
+    // Each commission belongs to an agent.
+    Commission.belongsTo(models.Agent, {
+      foreignKey: 'agent_id',
+      as: 'agent',
+    });
+    // If available, each commission belongs to a referrer.
+    Commission.belongsTo(models.Agent, {
+      foreignKey: 'referrer_id',
+      as: 'referrer',
+    });
   }
 }
 

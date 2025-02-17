@@ -27,6 +27,8 @@
     table { width: 100%; border-collapse: collapse; margin-top: 15px; }
     table, th, td { border: 1px solid #dee2e6; }
     th, td { padding: 10px; text-align: left; }
+    .filter-form { margin-bottom: 20px; }
+    .filter-form input, .filter-form button { padding: 8px; margin: 5px; }
   </style>
 </head>
 <body>
@@ -46,8 +48,9 @@
       <p>Welcome to your Agent Dashboard. Use the sidebar to navigate.</p>
     </div>
   </div>
+  
   <script>
-    // Check for token; if not present, redirect to login.
+    // Redirect to login if token is missing.
     if (!localStorage.getItem('token')) {
       window.location.href = 'login.html';
     }
@@ -66,7 +69,7 @@
       const contentDiv = document.getElementById('content');
       switch(page) {
         case 'overview':
-          contentDiv.innerHTML = '<h3>Dashboard Overview</h3><p>Dashboard metrics go here...</p>';
+          contentDiv.innerHTML = '<h3>Dashboard Overview</h3><p>Overview metrics go here...</p>';
           break;
         case 'leads':
           contentDiv.innerHTML = '<h3>My Leads</h3><div id="leadsContainer">Loading your leads...</div>';
@@ -79,7 +82,7 @@
         case 'commission':
           contentDiv.innerHTML = `
             <h3>My Commission</h3>
-            <form id="commissionFilterForm">
+            <form id="commissionFilterForm" class="filter-form">
               <input type="date" id="startDate" placeholder="Start Date">
               <input type="date" id="endDate" placeholder="End Date">
               <button type="submit">Filter</button>
@@ -139,7 +142,9 @@
                 <option value="Approved">Approved</option>
                 <option value="KIV">KIV</option>
                 <option value="Rejected">Rejected</option>
-                <option value="Accepted/Decline/Appeal">Accepted/Decline/Appeal</option>
+                <option value="Declined">Declined</option>
+                <option value="Appealed">Appealed</option>
+                <option value="Accepted">Accepted</option>
               </select>
             </td>
           </tr>`;
@@ -170,17 +175,32 @@
     
     async function updateLeadStatus(leadId, newStatus) {
       if (!newStatus) return;
+      let requestData = { status: newStatus };
+      
+      // If status is "Accepted", prompt for final loan amount.
+      if (newStatus === 'Accepted') {
+        const finalAmount = prompt("Please enter the final loan amount:");
+        if (!finalAmount) {
+          alert("Final loan amount is required for accepting a lead.");
+          return;
+        }
+        requestData.loan_amount = finalAmount;
+      } else {
+        // For other statuses, you might include the existing loan_amount if required.
+        requestData.loan_amount = 100000; // Example fallback; adjust as needed.
+      }
+      
       try {
         const response = await fetch(`/api/leads/${leadId}`, {
           method: "PATCH",
           headers: getAuthHeaders(),
-          body: JSON.stringify({ status: newStatus, loan_amount: 100000 }) // Adjust loan_amount as needed.
+          body: JSON.stringify(requestData)
         });
         const result = await response.json();
         if(result.error){
           alert("Error: " + result.error);
         } else {
-          alert("Lead status updated successfully.");
+          alert("Lead updated successfully.");
           loadMyLeads();
         }
       } catch (err) {
@@ -193,13 +213,13 @@
       // Get filter values (dates)
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
-      const agentId = localStorage.getItem('agentId');
+      const agentId = localStorage.getItem('agentId'); // For agents, use their own ID
       
       let queryParams = [];
       if (startDate) queryParams.push(`start_date=${startDate}`);
       if (endDate) queryParams.push(`end_date=${endDate}`);
-      // Agent's commissions; backend should filter by agent_id.
-      queryParams.push(`agent_id=${agentId}`);
+      // For agents, automatically filter by their ID.
+      if (agentId && agentId !== "null") queryParams.push(`agent_id=${agentId}`);
       
       const queryString = queryParams.length ? '?' + queryParams.join('&') : '';
       
@@ -215,23 +235,38 @@
         let html = `<table>
           <thead>
             <tr>
-              <th>Lead ID</th>
+              <th>Lead Name</th>
+              <th>Agent Name</th>
+              <th>Referrer Name</th>
+              <th>Loan Size</th>
               <th>Agent Commission</th>
               <th>Referrer Commission</th>
-              <th>Loan Amount</th>
               <th>Status</th>
-              <th>Date</th>
+              <th>Date Updated</th>
+              <th>Update Status</th>
             </tr>
           </thead>
           <tbody>`;
         commissions.forEach(comm => {
+          const leadName = (comm.lead && comm.lead.name) || 'N/A';
+          const agentName = (comm.agent && comm.agent.name) || 'N/A';
+          const referrerName = (comm.referrer && comm.referrer.name) || 'N/A';
           html += `<tr>
-            <td>${comm.lead_id}</td>
+            <td>${leadName}</td>
+            <td>${agentName}</td>
+            <td>${referrerName}</td>
+            <td>${comm.loan_amount}</td>
             <td>${comm.agent_commission || 'N/A'}</td>
             <td>${comm.referrer_commission || 'N/A'}</td>
-            <td>${comm.loan_amount}</td>
             <td>${comm.status}</td>
-            <td>${new Date(comm.createdAt).toLocaleString()}</td>
+            <td>${new Date(comm.updatedAt).toLocaleString()}</td>
+            <td>
+              <select onchange="updateCommissionStatus('${comm.id}', this.value)">
+                <option value="">Select Status</option>
+                <option value="Pending" ${comm.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                <option value="Paid" ${comm.status === 'Paid' ? 'selected' : ''}>Paid</option>
+              </select>
+            </td>
           </tr>`;
         });
         html += `</tbody></table>`;
@@ -239,6 +274,27 @@
       } catch (err) {
         console.error('[DEBUG] Error in loadMyCommissions:', err);
         document.getElementById('commissionsContainer').innerHTML = 'Error loading commissions.';
+      }
+    }
+    
+    async function updateCommissionStatus(commissionId, newStatus) {
+      if (!newStatus) return;
+      try {
+        const response = await fetch(`/api/commissions/${commissionId}`, {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ status: newStatus })
+        });
+        const result = await response.json();
+        if (result.error) {
+          alert("Error updating commission: " + result.error);
+        } else {
+          alert("Commission status updated successfully.");
+          loadMyCommissions();
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error updating commission status.");
       }
     }
     
