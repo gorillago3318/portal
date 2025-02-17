@@ -320,6 +320,19 @@ router.get('/pending', async (req, res) => {
   }
 });
 
+// Get a single agent by ID
+router.get('/:id', async (req, res) => {
+  try {
+    const agent = await Agent.findByPk(req.params.id);
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+    res.json(agent);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching agent', details: error.message });
+  }
+});
+
 // Approve/Reject Agent (only for pending agents)
 router.patch('/:id/approval', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
