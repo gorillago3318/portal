@@ -5,13 +5,12 @@ const axios = require('axios');
 const router = express.Router();
 const { authMiddleware } = require('../middleware/authMiddleware');
 
-
 const { Lead, Agent, Commission } = require('../models');
 const { calculateCommission } = require('../utils/commissionUtils');
 
 const MAX_LIMIT = 100;
 
-// Allowed lead statuses
+// Allowed lead statuses (update as needed)
 const ALLOWED_LEAD_STATUSES = [
   "New",
   "Contacted",
@@ -20,8 +19,9 @@ const ALLOWED_LEAD_STATUSES = [
   "Approved",
   "KIV",
   "Rejected",
-  "Accepted/Decline/Appeal",
-  "Accepted" // Added "Accepted" if you want to allow that value
+  "Declined",  // Separate status for declined
+  "Appealed",  // Separate status for appealed
+  "Accepted"   // Final accepted status
 ];
 
 /**
@@ -65,10 +65,9 @@ async function sendWhatsappMessageToAgent(recipientPhone, message) {
 }
 
 /**
- * Helper: Validate if a lead status transition is allowed.
- * For Admins, any allowed status is permitted.
- * For Agents, they can update only their assigned leads and cannot update if the lead is already accepted.
- *
+ * Helper function: Validate allowed lead status transitions.
+ * - Admins can change status arbitrarily.
+ * - Agents can update only their assigned leads and cannot update if the lead is already accepted.
  * @param {string} currentStatus - The current status of the lead.
  * @param {string} newStatus - The new status requested.
  * @param {string} loggedInRole - The role of the logged-in user (e.g., 'Admin' or 'Agent').
@@ -81,16 +80,16 @@ function isValidTransition(currentStatus, newStatus, loggedInRole, assignedAgent
   if (!ALLOWED_LEAD_STATUSES.includes(newStatus)) {
     return false;
   }
-  // Normalize role to lowercase.
+  // Normalize role.
   const role = loggedInRole ? loggedInRole.toLowerCase() : '';
-  // Admins can change status arbitrarily.
+  // Admins can update status arbitrarily.
   if (role === 'admin') {
     return true;
   }
   // For Agents, ensure the lead is assigned to them.
   if (role === 'agent' && String(assignedAgentId) === String(loggedInAgentId)) {
-    // Agents should not update a lead that is already accepted.
-    if (currentStatus === "Accepted" || currentStatus === "Accepted/Decline/Appeal") {
+    // Agents cannot update a lead if it is already accepted.
+    if (currentStatus === "Accepted") {
       return false;
     }
     return true;
@@ -302,7 +301,7 @@ router.get('/', async (req, res) => {
 router.patch('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, assigned_agent_id, loan_amount } = req.body;
+    const { status, assigned_agent_id, loan_amount } = req.body; // 'loan_amount' now represents the final approved amount when status is Accepted
 
     const lead = await Lead.findByPk(id);
     if (!lead) {
@@ -340,17 +339,20 @@ router.patch('/:id', authMiddleware, async (req, res) => {
       }
       lead.status = status;
 
-      // When a lead is accepted, calculate commissions.
+      // When a lead is accepted, require a final loan amount and update the existing loan_amount field.
       if (status === 'Accepted') {
         if (!loan_amount) {
-          return res.status(400).json({ error: 'Loan amount is required for commissions.' });
+          return res.status(400).json({ error: 'Final loan amount is required for accepted cases.' });
         }
+        // Update the loan_amount with the final approved value.
+        lead.loan_amount = loan_amount;
+        // Calculate commissions based on the final loan_amount.
         const { maxCommission, referrerCommission, agentCommission } = calculateCommission(loan_amount, lead.referrer_id);
         await Commission.create({
           lead_id: lead.id,
           agent_id: lead.assigned_agent_id,
           referrer_id: lead.referrer_id,
-          loan_amount,
+          loan_amount, // final approved amount
           max_commission: maxCommission,
           referrer_commission: referrerCommission,
           agent_commission: agentCommission,
@@ -388,7 +390,6 @@ function isValidTransition(currentStatus, newStatus, loggedInRole, assignedAgent
   if (!ALLOWED_LEAD_STATUSES.includes(newStatus)) {
     return false;
   }
-  // Normalize the role to lowercase.
   const role = loggedInRole ? loggedInRole.toLowerCase() : '';
   // Admins can update status arbitrarily.
   if (role === 'admin') {
@@ -397,7 +398,7 @@ function isValidTransition(currentStatus, newStatus, loggedInRole, assignedAgent
   // For Agents, ensure the lead is assigned to them.
   if (role === 'agent' && String(assignedAgentId) === String(loggedInAgentId)) {
     // Agents cannot update a lead if it is already accepted.
-    if (currentStatus === "Accepted" || currentStatus === "Accepted/Decline/Appeal") {
+    if (currentStatus === "Accepted") {
       return false;
     }
     return true;

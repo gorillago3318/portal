@@ -34,6 +34,7 @@
     <a href="#" onclick="loadPage('overview')">Dashboard</a>
     <a href="#" onclick="loadPage('leads')">My Leads</a>
     <a href="#" onclick="loadPage('profile')">My Profile</a>
+    <a href="#" onclick="loadPage('commission')">My Commission</a>
     <a href="#" onclick="loadPage('referral')">Referral Link</a>
     <a href="#" onclick="logout()">Logout</a>
   </div>
@@ -46,21 +47,26 @@
     </div>
   </div>
   <script>
+    // Check for token; if not present, redirect to login.
     if (!localStorage.getItem('token')) {
       window.location.href = 'login.html';
     }
+    
+    // Helper: Get authentication headers.
     function getAuthHeaders() {
       return {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + localStorage.getItem('token')
       };
     }
+    
+    // Navigation handler: show one section at a time.
     function loadPage(page) {
       document.getElementById('page-title').innerText = page.charAt(0).toUpperCase() + page.slice(1);
       const contentDiv = document.getElementById('content');
       switch(page) {
         case 'overview':
-          contentDiv.innerHTML = '<h3>Dashboard Overview</h3><p>My Leads: 5<br>Tasks: ...</p>';
+          contentDiv.innerHTML = '<h3>Dashboard Overview</h3><p>Dashboard metrics go here...</p>';
           break;
         case 'leads':
           contentDiv.innerHTML = '<h3>My Leads</h3><div id="leadsContainer">Loading your leads...</div>';
@@ -69,6 +75,22 @@
         case 'profile':
           contentDiv.innerHTML = '<h3>My Profile</h3><div id="profileContainer">Loading your profile...</div>';
           loadMyProfile();
+          break;
+        case 'commission':
+          contentDiv.innerHTML = `
+            <h3>My Commission</h3>
+            <form id="commissionFilterForm">
+              <input type="date" id="startDate" placeholder="Start Date">
+              <input type="date" id="endDate" placeholder="End Date">
+              <button type="submit">Filter</button>
+            </form>
+            <div id="commissionsContainer">Loading commissions...</div>
+          `;
+          document.getElementById('commissionFilterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            loadMyCommissions();
+          });
+          loadMyCommissions();
           break;
         case 'referral':
           const referralLink = 'https://wa.me/60108317781?text=(REF-CZ7B640D)%20Please%20send%20this%20message%20to%20activate%20the%20bot';
@@ -84,9 +106,9 @@
           contentDiv.innerHTML = '<p>Page not found.</p>';
       }
     }
+    
     async function loadMyLeads() {
       try {
-        // Assuming the agent's ID is stored in localStorage as "agentId".
         const agentId = localStorage.getItem('agentId');
         const response = await fetch(`/api/leads?agent_id=${agentId}`, { headers: getAuthHeaders() });
         const data = await response.json();
@@ -129,21 +151,23 @@
         document.getElementById('leadsContainer').innerHTML = 'Error loading leads.';
       }
     }
+    
     async function loadMyProfile() {
       try {
         const agentId = localStorage.getItem('agentId');
         const response = await fetch(`/api/agents/${agentId}`, { headers: getAuthHeaders() });
         const profile = await response.json();
-        let html = `<p><strong>Name:</strong> ${profile.name}</p>
-                    <p><strong>Email:</strong> ${profile.email}</p>
-                    <p><strong>Phone:</strong> ${profile.phone}</p>
-                    <p><strong>Location:</strong> ${profile.location}</p>`;
+        let html = `<p><strong>Name:</strong> ${profile.name || 'N/A'}</p>
+                    <p><strong>Email:</strong> ${profile.email || 'N/A'}</p>
+                    <p><strong>Phone:</strong> ${profile.phone || 'N/A'}</p>
+                    <p><strong>Location:</strong> ${profile.location || 'N/A'}</p>`;
         document.getElementById('profileContainer').innerHTML = html;
       } catch (err) {
         console.error(err);
         document.getElementById('profileContainer').innerHTML = 'Error loading profile.';
       }
     }
+    
     async function updateLeadStatus(leadId, newStatus) {
       if (!newStatus) return;
       try {
@@ -164,18 +188,74 @@
         alert("Error updating lead status.");
       }
     }
+    
+    async function loadMyCommissions() {
+      // Get filter values (dates)
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      const agentId = localStorage.getItem('agentId');
+      
+      let queryParams = [];
+      if (startDate) queryParams.push(`start_date=${startDate}`);
+      if (endDate) queryParams.push(`end_date=${endDate}`);
+      // Agent's commissions; backend should filter by agent_id.
+      queryParams.push(`agent_id=${agentId}`);
+      
+      const queryString = queryParams.length ? '?' + queryParams.join('&') : '';
+      
+      try {
+        const response = await fetch('/api/commissions' + queryString, { headers: getAuthHeaders() });
+        const result = await response.json();
+        console.log('[DEBUG] Commissions response:', result);
+        const commissions = result.data ? result.data : result;
+        if (!Array.isArray(commissions)) {
+          document.getElementById('commissionsContainer').innerHTML = 'Unexpected commissions format.';
+          return;
+        }
+        let html = `<table>
+          <thead>
+            <tr>
+              <th>Lead ID</th>
+              <th>Agent Commission</th>
+              <th>Referrer Commission</th>
+              <th>Loan Amount</th>
+              <th>Status</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>`;
+        commissions.forEach(comm => {
+          html += `<tr>
+            <td>${comm.lead_id}</td>
+            <td>${comm.agent_commission || 'N/A'}</td>
+            <td>${comm.referrer_commission || 'N/A'}</td>
+            <td>${comm.loan_amount}</td>
+            <td>${comm.status}</td>
+            <td>${new Date(comm.createdAt).toLocaleString()}</td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+        document.getElementById('commissionsContainer').innerHTML = html;
+      } catch (err) {
+        console.error('[DEBUG] Error in loadMyCommissions:', err);
+        document.getElementById('commissionsContainer').innerHTML = 'Error loading commissions.';
+      }
+    }
+    
     function copyReferralLink() {
       const input = document.getElementById('referralLinkInput');
       input.select();
       document.execCommand('copy');
       alert('Referral link copied to clipboard!');
     }
+    
     function logout() {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
       localStorage.removeItem('agentId');
       window.location.href = 'login.html';
     }
+    
     // Load default page on agent dashboard.
     loadPage('overview');
   </script>

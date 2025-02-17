@@ -2,6 +2,7 @@ const express = require('express');
 const morgan = require('morgan');
 const crypto = require('crypto');
 const path = require('path');
+const commissionsRouter = require('./routes/commissions');
 require('dotenv').config({ path: __dirname + '/.env' }); // Ensure your .env file is in your project root
 
 // Import Models
@@ -83,6 +84,8 @@ app.use((req, res, next) => {
   console.log(`[DEBUG] Incoming Request: ${req.method} ${req.originalUrl}`);
   next();
 });
+
+app.use('/api/commissions', commissionsRouter);
 
 // Health-check route
 app.get('/health', async (req, res) => {
