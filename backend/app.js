@@ -1,6 +1,7 @@
 const express = require('express');
 const morgan = require('morgan');
 const crypto = require('crypto');
+const path = require('path');
 require('dotenv').config({ path: __dirname + '/.env' }); // Ensure your .env file is in your project root
 
 // Import Models
@@ -10,22 +11,8 @@ const Agent = require('./models/agent');
 
 // Import Routes
 const authRouter = require('./routes/auth');    // Endpoints: POST /api/auth/login
-const leadsRouter = require('./routes/leads');  // Endpoints: POST /api/leads, GET /api/leads, PATCH /api/leads/:id, etc.
-const agentsRouter = require('./routes/agents'); // Endpoints include:
-//   POST   /api/agents/forgot-password
-//   POST   /api/agents/reset-password
-//   POST   /api/agents/create-admin       (Admin only)
-//   POST   /api/agents/create-agent       (Admin only)
-//   POST   /api/agents/register           (Self-registration for agents, status "Pending")
-//   POST   /api/agents/register-referrer  (Register a new referrer)
-//   GET    /api/agents                    (List all agents)
-//   GET    /api/agents/pending            (List pending agents)
-//   PATCH  /api/agents/:id/approval       (For pending agents: change to Active or Rejected)
-//   PATCH  /api/agents/:id/status         (Toggle Active/Inactive for approved agents)
-//   PATCH  /api/agents/:id                (Update agent details – available for Admin and Agent)
-//   DELETE /api/agents/:id                (Delete an agent)
-// (Also, if implemented, GET /api/agents/:id/referral-link)
-
+const leadsRouter = require('./routes/leads');    // Endpoints for leads
+const agentsRouter = require('./routes/agents');  // Endpoints for agents
 
 // Validate environment variables
 if (!process.env.DATABASE_URL || !process.env.PORT) {
@@ -38,20 +25,47 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// In your app.js, after initializing Express:
+// Set Cache-Control header to prevent caching
 app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
-  });
+});
 
-// Serve static files from the "public" folder (for HTML pages, CSS, JS, etc.)
+// Serve static files from the "public" folder (for CSS, JS, images, etc.)
 app.use(express.static('public'));
+
+// --- Custom Routes for HTML Pages ---
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/forgot-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'forgot-password.html'));
+});
+
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
+});
+
+app.get('/agent-registration', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'agent_registration.html'));
+});
+
+app.get('/referrer-registration', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'referrer_registration.html'));
+});
+
+app.get('/admin-dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin_dashboard.html'));
+});
+
+app.get('/agent-dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'agent_dashboard.html'));
+});
+// --- End Custom HTML Routes ---
 
 // Mount authentication routes first
 app.use('/api/auth', authRouter);
-
-// (QR routes removed)
-// Removed WhatsApp initialization code
 
 // Example: Global middleware for protected routes (if needed)
 const { authMiddleware } = require('./middleware/authMiddleware');
@@ -110,11 +124,10 @@ app.get('/referral', async (req, res) => {
   try {
     const token = crypto.createHash('sha256').update(referralCode + Date.now()).digest('hex');
     console.log(`[DEBUG] Generated referral token: ${token}`);
-    // If you need to store the referral code in a session, ensure session middleware is configured.
+    // If session middleware is configured, store referral code in session.
     req.session = req.session || {};
     req.session.referral_code = referralCode;
     console.log(`[INFO] Referral code stored in session: ${referralCode}`);
-    // Redirect to a WhatsApp URL (preset, can be modified as needed)
     const whatsappBotUrl = `https://wa.me/60126181683?text=referral_start`;
     res.redirect(whatsappBotUrl);
   } catch (error) {

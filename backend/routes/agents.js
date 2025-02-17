@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { Agent } = require('../models'); // Adjusted import for models
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { Agent } = require('../models'); // Adjusted import for models
 const { authMiddleware, checkRole } = require('../middleware/authMiddleware'); // Adjust path as needed
 
 /**
@@ -71,7 +71,7 @@ router.post('/forgot-password', async (req, res) => {
     agent.reset_password_expires = new Date(expires);
     await agent.save();
 
-    const message = `Hi ${agent.name}, use the following token to reset your password: ${resetToken}. It will expire in 1 hour.`;
+    const message = `Hi ${agent.name}, use the following token to reset your password: ${resetToken}. Please visit https://www.qaichatbot.chat/reset-password.html to complete the process. The token will expire in 1 hour.`;
     await sendWhatsAppMessage(phone, message);
     return sendResponse(res, 200, 'If this account exists, a reset link has been sent to your phone.');
   } catch (error) {
