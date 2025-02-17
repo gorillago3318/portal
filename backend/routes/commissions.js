@@ -41,4 +41,35 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/commissions/:id - Update commission status.
+ * Only Admins are allowed to update commission status.
+ * Allowed status values: "Pending" and "Paid".
+ */
+router.patch('/:id', authMiddleware, checkRole(['Admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Validate status input
+    const allowedStatuses = ['Pending', 'Paid'];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ error: `Invalid commission status. Allowed values: ${allowedStatuses.join(', ')}` });
+    }
+
+    const commission = await Commission.findByPk(id);
+    if (!commission) {
+      return res.status(404).json({ error: 'Commission not found' });
+    }
+
+    commission.status = status;
+    await commission.save();
+
+    res.status(200).json({ message: 'Commission updated successfully', data: commission });
+  } catch (error) {
+    console.error('[ERROR] Error updating commission:', error.message);
+    res.status(500).json({ error: 'Error updating commission', details: error.message });
+  }
+});
+
 module.exports = router;

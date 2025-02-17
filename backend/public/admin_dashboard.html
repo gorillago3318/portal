@@ -2,103 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin Dashboard</title>
+  <title>Agent Dashboard</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background-color: #f8f9fa; }
-    header { background-color: #343a40; padding: 10px; color: #fff; text-align: right; }
-    nav { background-color: #495057; padding: 10px; }
-    nav button { background: none; border: none; color: #fff; margin-right: 10px; cursor: pointer; }
-    nav button:hover { text-decoration: underline; }
-    .section { display: none; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-    table, th, td { border: 1px solid #dee2e6; }
-    th, td { padding: 10px; text-align: left; }
+    .sidebar {
+      width: 200px;
+      background-color: #343a40;
+      height: 100vh;
+      position: fixed;
+      padding-top: 20px;
+    }
+    .sidebar a {
+      display: block;
+      color: #fff;
+      padding: 15px;
+      text-decoration: none;
+    }
+    .sidebar a:hover { background-color: #495057; }
+    .main-content { margin-left: 220px; padding: 20px; }
+    .header { background-color: #e9ecef; padding: 10px; text-align: right; }
     .referral-link { margin: 20px 0; padding: 10px; background: #fff; border: 1px solid #ced4da; border-radius: 4px; }
     .copy-btn { background-color: #343a40; color: #fff; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
     .copy-btn:hover { background-color: #495057; }
-    form { margin-top: 20px; }
-    form input, form button, form select { padding: 8px; margin: 5px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    table, th, td { border: 1px solid #dee2e6; }
+    th, td { padding: 10px; text-align: left; }
     .filter-form { margin-bottom: 20px; }
+    .filter-form input, .filter-form button { padding: 8px; margin: 5px; }
   </style>
 </head>
 <body>
-  <header>
-    <button onclick="logout()">Logout</button>
-  </header>
-  <nav>
-    <button onclick="showSection('overview')">Overview</button>
-    <button onclick="showSection('manageAgents')">Manage Agents</button>
-    <button onclick="showSection('manageLeads')">Manage Leads</button>
-    <button onclick="showSection('viewCommissions')">View Commissions</button>
-    <button onclick="showSection('createAgent')">Create Agent</button>
-    <button onclick="showSection('createReferrer')">Create Referrer</button>
-    <button onclick="showSection('referralLink')">Referral Link</button>
-  </nav>
-  <main>
-    <section id="overview" class="section">
-      <h2>Dashboard Overview</h2>
-      <div id="overviewContent">Loading overview...</div>
-    </section>
-    
-    <section id="manageAgents" class="section">
-      <h2>Manage Agents</h2>
-      <div id="agentsContainer">Loading agents...</div>
-    </section>
-    
-    <section id="manageLeads" class="section">
-      <h2>Manage Leads</h2>
-      <div id="leadsContainer">Loading leads...</div>
-    </section>
-    
-    <section id="viewCommissions" class="section">
-      <h2>View Commissions</h2>
-      <form id="commissionFilterForm" class="filter-form">
-        <input type="date" id="startDate" placeholder="Start Date">
-        <input type="date" id="endDate" placeholder="End Date">
-        <input type="text" id="filterAgentId" placeholder="Agent ID (optional)">
-        <button type="submit">Filter</button>
-      </form>
-      <div id="commissionsContainer">Loading commissions...</div>
-    </section>
-    
-    <section id="createAgent" class="section">
-      <h2>Create New Agent</h2>
-      <form id="createAgentForm">
-        <input type="text" id="agentName" placeholder="Name" required>
-        <input type="text" id="agentPhone" placeholder="Phone" required>
-        <input type="email" id="agentEmail" placeholder="Email" required>
-        <input type="text" id="agentLocation" placeholder="Location" required>
-        <input type="text" id="agentBankName" placeholder="Bank Name" required>
-        <input type="text" id="agentAccountNumber" placeholder="Account Number" required>
-        <button type="submit">Create Agent</button>
-      </form>
-    </section>
-    
-    <section id="createReferrer" class="section">
-      <h2>Create New Referrer</h2>
-      <form id="createReferrerForm">
-        <input type="text" id="referrerName" placeholder="Name" required>
-        <input type="text" id="referrerPhone" placeholder="Phone" required>
-        <input type="email" id="referrerEmail" placeholder="Email" required>
-        <input type="text" id="referrerLocation" placeholder="Location" required>
-        <input type="text" id="referrerBankName" placeholder="Bank Name" required>
-        <input type="text" id="referrerAccountNumber" placeholder="Account Number" required>
-        <input type="text" id="parentReferralCode" placeholder="Parent Referral Code" required>
-        <button type="submit">Create Referrer</button>
-      </form>
-    </section>
-    
-    <section id="referralLink" class="section">
-      <h2>Referral Link</h2>
-      <div class="referral-link">
-        <input type="text" id="referralLinkInput" value="https://wa.me/60108317781?text=(REF-CZ7B640D)%20Please%20send%20this%20message%20to%20activate%20the%20bot" readonly style="width:80%; padding:8px;">
-        <button class="copy-btn" onclick="copyReferralLink()">Copy</button>
-      </div>
-    </section>
-  </main>
-
+  <div class="sidebar">
+    <a href="#" onclick="loadPage('overview')">Dashboard</a>
+    <a href="#" onclick="loadPage('leads')">My Leads</a>
+    <a href="#" onclick="loadPage('profile')">My Profile</a>
+    <a href="#" onclick="loadPage('commission')">My Commission</a>
+    <a href="#" onclick="loadPage('referral')">Referral Link</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+  <div class="main-content">
+    <div class="header">
+      <h2 id="page-title">Agent Dashboard</h2>
+    </div>
+    <div id="content">
+      <p>Welcome to your Agent Dashboard. Use the sidebar to navigate.</p>
+    </div>
+  </div>
+  
   <script>
-    // Check for token; if not present, redirect to login.
+    // Redirect to login if token is missing
     if (!localStorage.getItem('token')) {
       window.location.href = 'login.html';
     }
@@ -112,157 +64,68 @@
     }
     
     // Navigation handler: show one section at a time.
-    function showSection(sectionId) {
-      document.querySelectorAll('.section').forEach(sec => sec.style.display = 'none');
-      document.getElementById(sectionId).style.display = 'block';
-      if (sectionId === 'overview') loadOverview();
-      if (sectionId === 'manageAgents') loadAgents();
-      if (sectionId === 'manageLeads') loadLeads();
-      if (sectionId === 'viewCommissions') loadCommissions();
-    }
-    
-    // Overview: static content; later replace with dynamic data.
-    function loadOverview() {
-      document.getElementById('overviewContent').innerHTML = '<p>Total Leads: 50<br>Total Agents: 10<br>Total Commissions: RM 5,000</p>';
-    }
-    
-    // Load all agents.
-    async function loadAgents() {
-      try {
-        const response = await fetch('/api/agents', { headers: getAuthHeaders() });
-        const result = await response.json();
-        console.log('[DEBUG] GET /api/agents response:', result);
-        const agents = result.data ? result.data : result;
-        if (!Array.isArray(agents)) {
-          console.error('[DEBUG] Agents is not an array:', agents);
-          document.getElementById('agentsContainer').innerHTML = 'Error: Unexpected response format.';
-          return;
-        }
-        let html = '<table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Referral Code</th><th>Actions</th></tr></thead><tbody>';
-        agents.forEach(agent => {
-          const options = agent.status.toLowerCase() === 'pending'
-            ? '<option value="">Change Status</option><option value="Active">Active</option><option value="Rejected">Rejected</option>'
-            : '<option value="">Change Status</option><option value="Active">Active</option><option value="Inactive">Inactive</option>';
-          html += `<tr>
-            <td>${agent.name}</td>
-            <td>${agent.email || ''}</td>
-            <td>${agent.phone}</td>
-            <td>${agent.status}</td>
-            <td>${agent.referral_code || ''}</td>
-            <td>
-              <select onchange="updateAgentStatus('${agent.id}', this.value, '${agent.status}')">
-                ${options}
-              </select>
-              <button onclick="deleteAgent('${agent.id}')">Delete</button>
-            </td>
-          </tr>`;
-        });
-        html += '</tbody></table>';
-        document.getElementById('agentsContainer').innerHTML = html;
-      } catch (err) {
-        console.error('[DEBUG] Error in loadAgents:', err);
-        document.getElementById('agentsContainer').innerHTML = 'Error loading agents.';
-      }
-    }
-    
-    // Update agent status (approval for pending or toggle for active/inactive)
-    async function updateAgentStatus(agentId, newStatus, currentStatus) {
-      if (!newStatus) return;
-      try {
-        const endpoint = currentStatus.toLowerCase() === 'pending'
-          ? `/api/agents/${agentId}/approval`
-          : `/api/agents/${agentId}/status`;
-        const response = await fetch(endpoint, {
-          method: 'PATCH',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ status: newStatus })
-        });
-        const result = await response.json();
-        alert(result.message || 'Status updated successfully');
-        loadAgents();
-      } catch (err) {
-        console.error(err);
-        alert('Error updating status');
-      }
-    }
-    
-    // Delete agent.
-    async function deleteAgent(agentId) {
-      if (confirm("Are you sure you want to delete this agent?")) {
-        try {
-          const response = await fetch(`/api/agents/${agentId}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders()
+    function loadPage(page) {
+      document.getElementById('page-title').innerText = page.charAt(0).toUpperCase() + page.slice(1);
+      const contentDiv = document.getElementById('content');
+      switch(page) {
+        case 'overview':
+          contentDiv.innerHTML = '<h3>Dashboard Overview</h3><p>Overview metrics go here...</p>';
+          break;
+        case 'leads':
+          contentDiv.innerHTML = '<h3>My Leads</h3><div id="leadsContainer">Loading your leads...</div>';
+          loadMyLeads();
+          break;
+        case 'profile':
+          contentDiv.innerHTML = '<h3>My Profile</h3><div id="profileContainer">Loading your profile...</div>';
+          loadMyProfile();
+          break;
+        case 'commission':
+          contentDiv.innerHTML = `
+            <h3>My Commission</h3>
+            <form id="commissionFilterForm" class="filter-form">
+              <input type="date" id="startDate" placeholder="Start Date">
+              <input type="date" id="endDate" placeholder="End Date">
+              <button type="submit">Filter</button>
+            </form>
+            <div id="commissionsContainer">Loading commissions...</div>
+          `;
+          document.getElementById('commissionFilterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            loadMyCommissions();
           });
-          const result = await response.json();
-          alert(result.message || 'Agent deleted successfully');
-          loadAgents();
-        } catch (err) {
-          console.error(err);
-          alert('Error deleting agent');
-        }
+          loadMyCommissions();
+          break;
+        case 'referral':
+          const referralLink = 'https://wa.me/60108317781?text=(REF-CZ7B640D)%20Please%20send%20this%20message%20to%20activate%20the%20bot';
+          contentDiv.innerHTML = `
+            <h3>Referral Link</h3>
+            <div class="referral-link">
+              <input type="text" id="referralLinkInput" value="${referralLink}" readonly style="width:80%; padding:8px;">
+              <button class="copy-btn" onclick="copyReferralLink()">Copy</button>
+            </div>
+          `;
+          break;
+        default:
+          contentDiv.innerHTML = '<p>Page not found.</p>';
       }
     }
     
-    // Create new agent via admin.
-    document.getElementById('createAgentForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const data = {
-        name: document.getElementById('agentName').value,
-        phone: document.getElementById('agentPhone').value,
-        email: document.getElementById('agentEmail').value,
-        location: document.getElementById('agentLocation').value,
-        bank_name: document.getElementById('agentBankName').value,
-        account_number: document.getElementById('agentAccountNumber').value
-      };
+    async function loadMyLeads() {
       try {
-        const response = await fetch('/api/agents/create-agent', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(data)
-        });
-        const result = await response.json();
-        alert(result.message || 'Agent created successfully');
-        loadAgents();
-      } catch (err) {
-        console.error(err);
-        alert('Error creating agent');
-      }
-    });
-    
-    // Create new referrer via admin.
-    document.getElementById('createReferrerForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const data = {
-        name: document.getElementById('referrerName').value,
-        phone: document.getElementById('referrerPhone').value,
-        email: document.getElementById('referrerEmail').value,
-        location: document.getElementById('referrerLocation').value,
-        bank_name: document.getElementById('referrerBankName').value,
-        account_number: document.getElementById('referrerAccountNumber').value,
-        referrer_code: document.getElementById('parentReferralCode').value
-      };
-      try {
-        const response = await fetch('/api/agents/register-referrer', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(data)
-        });
-        const result = await response.json();
-        alert(result.message || 'Referrer created successfully');
-        loadAgents();
-      } catch (err) {
-        console.error(err);
-        alert('Error creating referrer');
-      }
-    });
-    
-    // Load leads for admin.
-    async function loadLeads() {
-      try {
-        const response = await fetch('/api/leads', { headers: getAuthHeaders() });
+        const agentId = localStorage.getItem('agentId');
+        const response = await fetch(`/api/leads?agent_id=${agentId}`, { headers: getAuthHeaders() });
         const data = await response.json();
-        let html = '<table><thead><tr><th>Name</th><th>Phone</th><th>Status</th><th>Created At</th><th>Actions</th></tr></thead><tbody>';
+        let html = `<table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Status</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>`;
         data.leads.forEach(lead => {
           html += `<tr>
             <td>${lead.name}</td>
@@ -279,13 +142,13 @@
                 <option value="Approved">Approved</option>
                 <option value="KIV">KIV</option>
                 <option value="Rejected">Rejected</option>
-                <option value="Accepted/Decline/Appeal">Accepted/Decline/Appeal</option>
-                <option value="Accepted">Accepted</option>
+                <option value="Declined">Declined</option>
+                <option value="Appealed">Appealed</option>
               </select>
             </td>
           </tr>`;
         });
-        html += '</tbody></table>';
+        html += `</tbody></table>`;
         document.getElementById('leadsContainer').innerHTML = html;
       } catch (err) {
         console.error(err);
@@ -293,22 +156,51 @@
       }
     }
     
-    // Update lead status.
+    async function loadMyProfile() {
+      try {
+        const agentId = localStorage.getItem('agentId');
+        const response = await fetch(`/api/agents/${agentId}`, { headers: getAuthHeaders() });
+        const profile = await response.json();
+        let html = `<p><strong>Name:</strong> ${profile.name || 'N/A'}</p>
+                    <p><strong>Email:</strong> ${profile.email || 'N/A'}</p>
+                    <p><strong>Phone:</strong> ${profile.phone || 'N/A'}</p>
+                    <p><strong>Location:</strong> ${profile.location || 'N/A'}</p>`;
+        document.getElementById('profileContainer').innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        document.getElementById('profileContainer').innerHTML = 'Error loading profile.';
+      }
+    }
+    
     async function updateLeadStatus(leadId, newStatus) {
       if (!newStatus) return;
+      let requestData = { status: newStatus };
+      
+      // If status is "Accepted", prompt for final loan amount.
+      if (newStatus === 'Accepted') {
+        const finalAmount = prompt("Please enter the final loan amount:");
+        if (!finalAmount) {
+          alert("Final loan amount is required for accepting a lead.");
+          return;
+        }
+        requestData.loan_amount = finalAmount;
+      } else {
+        // For other statuses, you might include the existing loan_amount if required.
+        requestData.loan_amount = 100000; // Example fallback; adjust as needed.
+      }
+      
       try {
         const response = await fetch(`/api/leads/${leadId}`, {
           method: "PATCH",
           headers: getAuthHeaders(),
-          // For commission calculations, you may need to pass a valid loan_amount; adjust as needed.
-          body: JSON.stringify({ status: newStatus, loan_amount: 100000 })
+          body: JSON.stringify(requestData)
         });
         const result = await response.json();
-        if (result.error) {
+        if(result.error){
           alert("Error: " + result.error);
         } else {
           alert("Lead updated successfully.");
-          loadLeads();
+          loadMyLeads();
         }
       } catch (err) {
         console.error(err);
@@ -316,17 +208,17 @@
       }
     }
     
-    // Load commissions for admin with optional filtering.
-    async function loadCommissions() {
-      // Get filter values
+    async function loadMyCommissions() {
+      // Get filter values (dates)
       const startDate = document.getElementById('startDate').value;
       const endDate = document.getElementById('endDate').value;
-      const filterAgentId = document.getElementById('filterAgentId').value;
+      const agentId = localStorage.getItem('agentId'); // For agents, use their own ID
       
       let queryParams = [];
       if (startDate) queryParams.push(`start_date=${startDate}`);
       if (endDate) queryParams.push(`end_date=${endDate}`);
-      if (filterAgentId) queryParams.push(`agent_id=${filterAgentId}`);
+      // For agents, we automatically filter by their ID.
+      queryParams.push(`agent_id=${agentId}`);
       
       const queryString = queryParams.length ? '?' + queryParams.join('&') : '';
       
@@ -348,42 +240,63 @@
               <th>Loan Amount</th>
               <th>Status</th>
               <th>Date</th>
+              <th>Update Status</th>
             </tr>
           </thead>
           <tbody>`;
-        commissions.forEach(commission => {
+        commissions.forEach(comm => {
           html += `<tr>
-            <td>${commission.lead_id}</td>
-            <td>${commission.agent_commission ? commission.agent_commission : 'N/A'}</td>
-            <td>${commission.referrer_commission ? commission.referrer_commission : 'N/A'}</td>
-            <td>${commission.loan_amount}</td>
-            <td>${commission.status}</td>
-            <td>${new Date(commission.createdAt).toLocaleString()}</td>
+            <td>${comm.lead_id}</td>
+            <td>${comm.agent_commission ? comm.agent_commission : 'N/A'}</td>
+            <td>${comm.referrer_commission ? comm.referrer_commission : 'N/A'}</td>
+            <td>${comm.loan_amount}</td>
+            <td>${comm.status}</td>
+            <td>${new Date(comm.createdAt).toLocaleString()}</td>
+            <td>
+              <select onchange="updateCommissionStatus('${comm.id}', this.value)">
+                <option value="">Select Status</option>
+                <option value="Pending" ${comm.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                <option value="Paid" ${comm.status === 'Paid' ? 'selected' : ''}>Paid</option>
+              </select>
+            </td>
           </tr>`;
         });
         html += `</tbody></table>`;
         document.getElementById('commissionsContainer').innerHTML = html;
       } catch (err) {
-        console.error('[DEBUG] Error in loadCommissions:', err);
+        console.error('[DEBUG] Error in loadMyCommissions:', err);
         document.getElementById('commissionsContainer').innerHTML = 'Error loading commissions.';
       }
     }
     
-    // Filter commissions form handler.
-    document.getElementById('commissionFilterForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      loadCommissions();
-    });
+    async function updateCommissionStatus(commissionId, newStatus) {
+      if (!newStatus) return;
+      try {
+        const response = await fetch(`/api/commissions/${commissionId}`, {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ status: newStatus })
+        });
+        const result = await response.json();
+        if (result.error) {
+          alert("Error updating commission: " + result.error);
+        } else {
+          alert("Commission status updated successfully.");
+          loadMyCommissions();
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error updating commission status.");
+      }
+    }
     
-    // Referral link copy function.
     function copyReferralLink() {
       const input = document.getElementById('referralLinkInput');
       input.select();
       document.execCommand('copy');
-      alert('Referral link copied!');
+      alert('Referral link copied to clipboard!');
     }
     
-    // Logout function.
     function logout() {
       localStorage.removeItem('token');
       localStorage.removeItem('role');
@@ -391,8 +304,8 @@
       window.location.href = 'login.html';
     }
     
-    // Load overview on initial page load.
-    showSection('overview');
+    // Load default page on agent dashboard.
+    loadPage('overview');
   </script>
 </body>
 </html>
