@@ -7,18 +7,18 @@ const { Agent } = require('../models');
 
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    console.log(`[DEBUG] Login attempt for email: ${email}`);
+    const { phone, password } = req.body;
+    console.log(`[DEBUG] Login attempt for phone: ${phone}`);
 
-    // Find the agent by email
-    const agent = await Agent.findOne({ where: { email } });
+    // Find the agent by phone number
+    const agent = await Agent.findOne({ where: { phone } });
     if (!agent) {
-      console.log(`[DEBUG] No agent found for email: ${email}`);
+      console.log(`[DEBUG] No agent found for phone: ${phone}`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     console.log(`[DEBUG] Found agent with ID: ${agent.id} and status: ${agent.status}`);
 
-    // Check if the agent's status allows login (e.g., only Active users may login)
+    // Check if the agent's status allows login (only Active users may login)
     if (agent.status !== 'Active') {
       console.log(`[DEBUG] Agent status not active: ${agent.status}`);
       return res.status(403).json({ error: 'User is not active. Please contact an administrator.' });
@@ -35,7 +35,7 @@ router.post('/login', async (req, res) => {
     const tokenPayload = {
       id: agent.id,
       role: agent.role,
-      email: agent.email,
+      phone: agent.phone,
     };
 
     // Sign the JWT token
