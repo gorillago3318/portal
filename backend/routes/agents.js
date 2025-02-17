@@ -106,7 +106,7 @@ router.post('/reset-password', async (req, res) => {
     agent.reset_password_expires = null;
     await agent.save();
 
-    const message = `Hi ${agent.name}, your password has been successfully reset. You can now log in with your new password.`;
+    const message = `Hi ${agent.name}, your password has been successfully reset. You can now log in with your new password. Kindly login at https://www.qaichatbot.chat/login.`;
     await sendWhatsAppMessage(phone, message);
     return sendResponse(res, 200, 'Password reset successful. You can now log in with your new password.');
   } catch (error) {
