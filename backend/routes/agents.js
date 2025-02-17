@@ -4,7 +4,7 @@ const axios = require('axios');
 const { Agent } = require('../models'); // Adjusted import for models
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { authMiddleware, checkRole } = require('../middleware/authMiddleware'); // Adjust the path as needed
+const { authMiddleware, checkRole } = require('../middleware/authMiddleware'); // Adjust path as needed
 
 /**
  * sendWhatsAppMessage sends a text message via WhatsApp Cloud API.
@@ -49,37 +49,30 @@ const sendResponse = (res, status, message, data = null, error = null) => {
 };
 
 // ------------------------------------------------------
-// 1) PUBLIC ROUTES (No authMiddleware) for password reset
+// 1) PUBLIC ROUTES for Password Reset
 // ------------------------------------------------------
 
 // Forgot Password
 router.post('/forgot-password', async (req, res) => {
   try {
-    const { phone } = req.body; // Get the phone number from the request
+    const { phone } = req.body;
     if (!phone) {
       return sendResponse(res, 400, 'Phone number is required');
     }
-
-    // Find the agent using the phone number
     const agent = await Agent.findOne({ where: { phone }, paranoid: false });
     if (!agent) {
-      // Do not reveal if the phone number doesn't exist
+      // Do not reveal whether the phone exists
       return sendResponse(res, 200, 'If this account exists, a reset link has been sent to your phone.');
     }
-
-    // Generate a reset token and expiration time
     const resetToken = crypto.randomBytes(32).toString('hex');
     const expires = Date.now() + 60 * 60 * 1000; // Token expires in 1 hour
 
-    // Save the token and expiration in the agent's record
     agent.reset_password_token = resetToken;
     agent.reset_password_expires = new Date(expires);
     await agent.save();
 
-    // Send the reset token via WhatsApp Cloud API
     const message = `Hi ${agent.name}, use the following token to reset your password: ${resetToken}. It will expire in 1 hour.`;
     await sendWhatsAppMessage(phone, message);
-
     return sendResponse(res, 200, 'If this account exists, a reset link has been sent to your phone.');
   } catch (error) {
     console.error('[ERROR][forgot-password]:', error.message);
@@ -90,42 +83,31 @@ router.post('/forgot-password', async (req, res) => {
 // Reset Password
 router.post('/reset-password', async (req, res) => {
   try {
-    const { phone, token, new_password } = req.body; // Include phone in the request
+    const { phone, token, new_password } = req.body;
     if (!phone || !token || !new_password) {
       return sendResponse(res, 400, 'Phone number, token, and new_password are required');
     }
-
-    // Find the agent using the phone number and token
     const agent = await Agent.findOne({
       where: { phone, reset_password_token: token },
       paranoid: false,
     });
-
     if (!agent) {
       return sendResponse(res, 400, 'Invalid or expired token');
     }
-
-    // Check if the token is expired
     if (Date.now() > agent.reset_password_expires.getTime()) {
       return sendResponse(res, 400, 'Reset token has expired. Please request a new one.');
     }
-
-    // Validate password length
     if (new_password.length < 8) {
       return sendResponse(res, 400, 'Password must be at least 8 characters long');
     }
-
-    // Hash the new password and update the record
     const hashedPassword = await bcrypt.hash(new_password, 10);
     agent.password = hashedPassword;
-    agent.reset_password_token = null; // Clear the token
-    agent.reset_password_expires = null; // Clear the expiration time
+    agent.reset_password_token = null;
+    agent.reset_password_expires = null;
     await agent.save();
 
-    // Send confirmation message via WhatsApp Cloud API
     const message = `Hi ${agent.name}, your password has been successfully reset. You can now log in with your new password.`;
     await sendWhatsAppMessage(phone, message);
-
     return sendResponse(res, 200, 'Password reset successful. You can now log in with your new password.');
   } catch (error) {
     console.error('[ERROR][reset-password]:', error.message);
@@ -134,35 +116,28 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // ------------------------------------------------------
-// 2) PROTECTED ROUTES (Require authMiddleware & Admin role)
+// 2) PROTECTED ROUTES (Require authMiddleware & Admin Role)
 // ------------------------------------------------------
 
 // Admin creation route
 router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { name, phone, email, location, status } = req.body;
-
   try {
-    // Check if the email or phone number already exists
     const existingAdmin = await Agent.findOne({ where: { email } });
     if (existingAdmin) {
       return res.status(400).json({ error: 'Admin with this email already exists.' });
     }
-
-    // Generate a temporary password
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    // Create the new admin
     const newAdmin = await Agent.create({
       name,
       phone,
       email,
       location,
-      role: 'Admin', // Set the role explicitly
-      status: status || 'Active', // Default status is Active
-      password: hashedPassword, // Save the hashed password
+      role: 'Admin',
+      status: status || 'Active',  // For admin-created agents, default to Active.
+      password: hashedPassword,
     });
-
     res.status(201).json({
       message: 'Admin created successfully',
       temp_password: tempPassword,
@@ -176,19 +151,13 @@ router.post('/create-admin', authMiddleware, checkRole(['Admin']), async (req, r
 // Admin creates a new agent
 router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { name, phone, email, location, bank_name, account_number, status } = req.body;
-
   try {
-    // Check if phone number or email already exists
     const existingAgent = await Agent.findOne({ where: { phone } });
     if (existingAgent) {
       return res.status(400).json({ error: 'An agent with this phone number already exists.' });
     }
-
-    // Generate a temporary password
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    // Create the agent
     const newAgent = await Agent.create({
       name,
       phone,
@@ -196,11 +165,11 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
       location,
       bank_name,
       account_number,
-      role: 'Agent', // Default role is Agent
-      status: status || 'Pending', // Default status is Pending
+      role: 'Agent',
+      // For agents created by Admin, default status is Active
+      status: status || 'Active',
       password: hashedPassword,
     });
-
     res.status(201).json({
       message: 'Agent created successfully',
       agent: {
@@ -226,17 +195,14 @@ router.post('/create-agent', authMiddleware, checkRole(['Admin']), async (req, r
 // Self-registration (agent)
 router.post('/register', async (req, res) => {
   const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
-
   try {
     const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
     if (existingAgent) {
       return sendResponse(res, 400, 'Phone number already in use');
     }
-
     if (!bank_name || !account_number) {
       return sendResponse(res, 400, 'Bank name and account number are required for registration');
     }
-
     let parent_referrer_id = null;
     if (referrer_code) {
       const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
@@ -245,12 +211,8 @@ router.post('/register', async (req, res) => {
       }
       parent_referrer_id = referrer.id;
     }
-
-    // Generate a temporary password
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    // Create the new Agent
     const newAgent = await Agent.create({
       name,
       phone,
@@ -258,11 +220,10 @@ router.post('/register', async (req, res) => {
       location,
       bank_name,
       account_number,
-      status: 'Pending', // Default to Pending
+      status: 'Pending', // Self-registration creates agent with Pending status.
       parent_referrer_id,
       password: hashedPassword,
     });
-
     sendResponse(res, 201, 'Registration successful. Awaiting approval.', {
       id: newAgent.id,
       name: newAgent.name,
@@ -281,27 +242,20 @@ router.post('/register', async (req, res) => {
 // Register a referrer
 router.post('/register-referrer', async (req, res) => {
   const { name, phone, email, location, bank_name, account_number, referrer_code } = req.body;
-
   try {
     const referrer = await Agent.findOne({ where: { referral_code: referrer_code } });
     if (!referrer) {
       return sendResponse(res, 404, 'Referrer not found');
     }
-
     const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
     if (existingAgent) {
       return sendResponse(res, 400, 'Phone number already in use');
     }
-
     if (!bank_name || !account_number) {
       return sendResponse(res, 400, 'Bank name and account number are required');
     }
-
-    // Generate a temporary password
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    // Create the Referrer
     const newReferrer = await Agent.create({
       name,
       phone,
@@ -314,7 +268,6 @@ router.post('/register-referrer', async (req, res) => {
       status: 'Active',
       password: hashedPassword,
     });
-
     sendResponse(res, 201, 'Referrer registered successfully', {
       id: newReferrer.id,
       name: newReferrer.name,
@@ -330,15 +283,13 @@ router.post('/register-referrer', async (req, res) => {
   }
 });
 
-// Generate Referral Link
+// Generate Referral Link for a specific agent
 router.get('/:id/referral-link', async (req, res) => {
   const { id } = req.params;
-
   try {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
-
-    const referralLink = `${process.env.BASE_URL || 'http://localhost:5000'}/api/leads?referral_code=${agent.referral_code}`;
+    const referralLink = `${process.env.BASE_URL || 'http://localhost:4000'}/api/leads?referral_code=${agent.referral_code}`;
     sendResponse(res, 200, 'Referral link generated successfully', { referralLink });
   } catch (error) {
     sendResponse(res, 500, 'Error generating referral link', null, error.message);
@@ -373,25 +324,18 @@ router.get('/pending', async (req, res) => {
 router.patch('/:id/approval', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
-
-  // Validate allowed status changes: only 'Active' or 'Rejected' are allowed
+  // Only allow changing from "Pending" to "Active" or "Rejected"
   if (!['Active', 'Rejected'].includes(status)) {
     return sendResponse(res, 400, 'Invalid status. Allowed values are "Active" or "Rejected".');
   }
-
   try {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
-
-    // Only allow approval if agent is still pending (case-insensitive check)
     if (agent.status.toLowerCase() !== 'pending') {
       return sendResponse(res, 400, 'Only "Pending" agents can be approved or rejected.');
     }
-
-    // Set the new status
     agent.status = status;
     await agent.save();
-
     sendResponse(res, 200, `Agent status updated to: ${status}`, agent);
   } catch (error) {
     sendResponse(res, 500, 'Error updating agent approval status', null, error.message);
@@ -402,52 +346,42 @@ router.patch('/:id/approval', authMiddleware, checkRole(['Admin']), async (req, 
 router.patch('/:id/status', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
-
-  // Validate allowed status changes
   if (!['Active', 'Inactive'].includes(status)) {
     return sendResponse(res, 400, 'Invalid status. Allowed values are "Active" or "Inactive".');
   }
-
   try {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
-
     if (agent.status === status) {
       return sendResponse(res, 400, `Agent is already ${status}.`);
     }
-
     agent.status = status;
     await agent.save();
-
     sendResponse(res, 200, `Agent status updated to: ${status}`, agent);
   } catch (error) {
     sendResponse(res, 500, 'Error updating agent status', null, error.message);
   }
 });
 
-// Update Agent Details
+// Update Agent Details (accessible to Admin and Agent)
 router.patch('/:id', authMiddleware, checkRole(['Admin', 'Agent']), async (req, res) => {
   const { id } = req.params;
   const { name, phone, email, location, bank_name, account_number } = req.body;
-
   try {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
-
     if (phone && phone !== agent.phone) {
       const existingAgent = await Agent.findOne({ where: { phone }, paranoid: false });
       if (existingAgent) {
         return sendResponse(res, 400, 'Phone number already in use');
       }
     }
-
     agent.name = name ?? agent.name;
     agent.phone = phone ?? agent.phone;
     agent.email = email ?? agent.email;
     agent.location = location ?? agent.location;
     agent.bank_name = bank_name ?? agent.bank_name;
     agent.account_number = account_number ?? agent.account_number;
-
     await agent.save();
     sendResponse(res, 200, 'Agent details updated successfully', agent);
   } catch (error) {
@@ -458,11 +392,9 @@ router.patch('/:id', authMiddleware, checkRole(['Admin', 'Agent']), async (req, 
 // Delete an Agent
 router.delete('/:id', authMiddleware, checkRole(['Admin']), async (req, res) => {
   const { id } = req.params;
-
   try {
     const agent = await Agent.findByPk(id);
     if (!agent) return sendResponse(res, 404, 'Agent not found');
-
     await agent.destroy();
     sendResponse(res, 200, 'Agent deleted successfully');
   } catch (error) {

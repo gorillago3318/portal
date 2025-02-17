@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Referrer Self Registration</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f2f2f2; }
+    .container {
+      width: 350px; margin: 50px auto; background: #fff; padding: 20px;
+      border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h2 { text-align: center; }
+    input { width: 100%; padding: 10px; margin: 10px 0; }
+    button { width: 100%; padding: 10px; background: #2c3e50; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #34495e; }
+    .links { text-align: center; margin-top: 15px; }
+    .links a { color: #2c3e50; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Referrer Registration</h2>
+    <form id="referrerRegisterForm">
+      <input type="text" id="name" placeholder="Full Name" required>
+      <input type="text" id="phone" placeholder="Phone" required>
+      <input type="email" id="email" placeholder="Email" required>
+      <input type="text" id="location" placeholder="Location" required>
+      <input type="text" id="bank_name" placeholder="Bank Name" required>
+      <input type="text" id="account_number" placeholder="Account Number" required>
+      <!-- The referrer self-registration requires a parent referral code -->
+      <input type="text" id="referrer_code" placeholder="Parent Referral Code" required>
+      <button type="submit">Register Referrer</button>
+    </form>
+    <div class="links">
+      <a href="login.html">Back to Login</a>
+    </div>
+  </div>
+  <script>
+    document.getElementById('referrerRegisterForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const data = {
+        name: document.getElementById('name').value,
+        phone: document.getElementById('phone').value,
+        email: document.getElementById('email').value,
+        location: document.getElementById('location').value,
+        bank_name: document.getElementById('bank_name').value,
+        account_number: document.getElementById('account_number').value,
+        referrer_code: document.getElementById('referrer_code').value
+      };
+      try {
+        const response = await fetch('/api/agents/register-referrer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await response.json();
+        if (response.ok) {
+          alert(result.message);
+          window.location.href = 'login.html';
+        } else {
+          alert(result.error || 'Registration failed');
+        }
+      } catch (error) {
+        console.error(error);
+        alert('An error occurred during registration.');
+      }
+    });
+  </script>
+</body>
+</html>

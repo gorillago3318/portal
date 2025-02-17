@@ -88,10 +88,9 @@ class Lead extends Model {
             'Preparing Documents',
             'Submitted',
             'Approved',
-            'Declined',
             'KIV',
-            'Accepted',
-            'Rejected'
+            'Rejected',
+            'Accepted/Decline/Appeal'
           ),
           defaultValue: 'New',
         },

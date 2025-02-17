@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Agent Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background-color: #f8f9fa; }
+    .sidebar {
+      width: 200px;
+      background-color: #343a40;
+      height: 100vh;
+      position: fixed;
+      padding-top: 20px;
+    }
+    .sidebar a {
+      display: block;
+      color: #fff;
+      padding: 15px;
+      text-decoration: none;
+    }
+    .sidebar a:hover { background-color: #495057; }
+    .main-content { margin-left: 220px; padding: 20px; }
+    .header { background-color: #e9ecef; padding: 10px; text-align: right; }
+    .referral-link { margin: 20px 0; padding: 10px; background: #fff; border: 1px solid #ced4da; border-radius: 4px; }
+    .copy-btn { background-color: #343a40; color: #fff; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+    .copy-btn:hover { background-color: #495057; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    table, th, td { border: 1px solid #dee2e6; }
+    th, td { padding: 10px; text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <a href="#" onclick="loadPage('overview')">Dashboard</a>
+    <a href="#" onclick="loadPage('leads')">My Leads</a>
+    <a href="#" onclick="loadPage('profile')">My Profile</a>
+    <a href="#" onclick="loadPage('referral')">Referral Link</a>
+    <a href="#" onclick="logout()">Logout</a>
+  </div>
+  <div class="main-content">
+    <div class="header">
+      <h2 id="page-title">Agent Dashboard</h2>
+    </div>
+    <div id="content">
+      <p>Welcome to your Agent Dashboard. Use the sidebar to navigate.</p>
+    </div>
+  </div>
+  <script>
+    if (!localStorage.getItem('token')) {
+      window.location.href = 'login.html';
+    }
+    function getAuthHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + localStorage.getItem('token')
+      };
+    }
+    function loadPage(page) {
+      document.getElementById('page-title').innerText = page.charAt(0).toUpperCase() + page.slice(1);
+      const contentDiv = document.getElementById('content');
+      switch(page) {
+        case 'overview':
+          contentDiv.innerHTML = '<h3>Dashboard Overview</h3><p>My Leads: 5<br>Tasks: ...</p>';
+          break;
+        case 'leads':
+          contentDiv.innerHTML = '<h3>My Leads</h3><div id="leadsContainer">Loading your leads...</div>';
+          loadMyLeads();
+          break;
+        case 'profile':
+          contentDiv.innerHTML = '<h3>My Profile</h3><div id="profileContainer">Loading your profile...</div>';
+          loadMyProfile();
+          break;
+        case 'referral':
+          const referralLink = 'https://wa.me/60108317781?text=(REF-CZ7B640D)%20Please%20send%20this%20message%20to%20activate%20the%20bot';
+          contentDiv.innerHTML = `
+            <h3>Referral Link</h3>
+            <div class="referral-link">
+              <input type="text" id="referralLinkInput" value="${referralLink}" readonly style="width:80%; padding:8px;">
+              <button class="copy-btn" onclick="copyReferralLink()">Copy</button>
+            </div>
+          `;
+          break;
+        default:
+          contentDiv.innerHTML = '<p>Page not found.</p>';
+      }
+    }
+    async function loadMyLeads() {
+      try {
+        // Assuming the agent's ID is stored in localStorage as "agentId".
+        const agentId = localStorage.getItem('agentId');
+        const response = await fetch(`/api/leads?agent_id=${agentId}`, { headers: getAuthHeaders() });
+        const data = await response.json();
+        let html = `<table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Status</th>
+              <th>Created At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>`;
+        data.leads.forEach(lead => {
+          html += `<tr>
+            <td>${lead.name}</td>
+            <td>${lead.phone}</td>
+            <td>${lead.status}</td>
+            <td>${new Date(lead.createdAt).toLocaleString()}</td>
+            <td>
+              <select onchange="updateLeadStatus('${lead.id}', this.value)">
+                <option value="">Select Status</option>
+                <option value="New">New</option>
+                <option value="Contacted">Contacted</option>
+                <option value="Preparing Documents">Preparing Documents</option>
+                <option value="Submitted">Submitted</option>
+                <option value="Approved">Approved</option>
+                <option value="KIV">KIV</option>
+                <option value="Rejected">Rejected</option>
+                <option value="Accepted/Decline/Appeal">Accepted/Decline/Appeal</option>
+              </select>
+            </td>
+          </tr>`;
+        });
+        html += `</tbody></table>`;
+        document.getElementById('leadsContainer').innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        document.getElementById('leadsContainer').innerHTML = 'Error loading leads.';
+      }
+    }
+    async function loadMyProfile() {
+      try {
+        const agentId = localStorage.getItem('agentId');
+        const response = await fetch(`/api/agents/${agentId}`, { headers: getAuthHeaders() });
+        const profile = await response.json();
+        let html = `<p><strong>Name:</strong> ${profile.name}</p>
+                    <p><strong>Email:</strong> ${profile.email}</p>
+                    <p><strong>Phone:</strong> ${profile.phone}</p>
+                    <p><strong>Location:</strong> ${profile.location}</p>`;
+        document.getElementById('profileContainer').innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        document.getElementById('profileContainer').innerHTML = 'Error loading profile.';
+      }
+    }
+    async function updateLeadStatus(leadId, newStatus) {
+      if (!newStatus) return;
+      try {
+        const response = await fetch(`/api/leads/${leadId}`, {
+          method: "PATCH",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ status: newStatus, loan_amount: 100000 }) // Adjust loan_amount as needed.
+        });
+        const result = await response.json();
+        if(result.error){
+          alert("Error: " + result.error);
+        } else {
+          alert("Lead status updated successfully.");
+          loadMyLeads();
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error updating lead status.");
+      }
+    }
+    function copyReferralLink() {
+      const input = document.getElementById('referralLinkInput');
+      input.select();
+      document.execCommand('copy');
+      alert('Referral link copied to clipboard!');
+    }
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      localStorage.removeItem('agentId');
+      window.location.href = 'login.html';
+    }
+    // Load default page on agent dashboard.
+    loadPage('overview');
+  </script>
+</body>
+</html>

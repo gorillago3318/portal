@@ -1,51 +1,52 @@
+// routes/auth.js
 const express = require('express');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
 const router = express.Router();
-const { Agent } = require('../models'); // Adjust path to match your project structure
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { Agent } = require('../models');
 
-// Login route
 router.post('/login', async (req, res) => {
+  try {
     const { email, password } = req.body;
+    console.log(`[DEBUG] Login attempt for email: ${email}`);
 
-    try {
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required.' });
-        }
-
-        const user = await Agent.findOne({ where: { email } });
-        if (!user) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-
-        // Check if the user has a password set
-        if (!user.password) {
-            return res.status(500).json({ error: 'User does not have a valid password. Please contact support.' });
-        }
-
-        // Compare the entered password with the stored hashed password
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            return res.status(401).json({ error: 'Invalid email or password.' });
-        }
-
-        // Generate a JWT token
-        const token = jwt.sign(
-            { id: user.id, role: user.role },
-            process.env.JWT_SECRET || 'default_secret',
-            { expiresIn: '24h' }
-        );
-
-        // Send response with token and user details
-        res.status(200).json({
-            token,
-            user: { id: user.id, name: user.name, role: user.role },
-            message: 'Login successful.',
-        });
-    } catch (error) {
-        console.error('[ERROR] Login error:', error.message);
-        res.status(500).json({ error: 'Internal server error', details: error.message });
+    // Find the agent by email
+    const agent = await Agent.findOne({ where: { email } });
+    if (!agent) {
+      console.log(`[DEBUG] No agent found for email: ${email}`);
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
+    console.log(`[DEBUG] Found agent with ID: ${agent.id} and status: ${agent.status}`);
+
+    // Check if the agent's status allows login (e.g., only Active users may login)
+    if (agent.status !== 'Active') {
+      console.log(`[DEBUG] Agent status not active: ${agent.status}`);
+      return res.status(403).json({ error: 'User is not active. Please contact an administrator.' });
+    }
+
+    // Compare the provided password with the hashed password
+    const passwordMatch = await bcrypt.compare(password, agent.password);
+    console.log(`[DEBUG] Password match result: ${passwordMatch}`);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Build the JWT payload
+    const tokenPayload = {
+      id: agent.id,
+      role: agent.role,
+      email: agent.email,
+    };
+
+    // Sign the JWT token
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'default_secret', { expiresIn: '1h' });
+    console.log(`[DEBUG] Generated JWT token: ${token}`);
+
+    res.json({ token, role: agent.role, agentId: agent.id });
+  } catch (error) {
+    console.error('[DEBUG] Error during login:', error.message, error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 module.exports = router;

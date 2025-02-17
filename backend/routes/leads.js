@@ -3,11 +3,26 @@ const { Op } = require('sequelize');
 const { validate: isUuid } = require('uuid'); // UUID validation
 const axios = require('axios');
 const router = express.Router();
+const { authMiddleware } = require('../middleware/authMiddleware');
+
 
 const { Lead, Agent, Commission } = require('../models');
 const { calculateCommission } = require('../utils/commissionUtils');
 
 const MAX_LIMIT = 100;
+
+// Allowed lead statuses
+const ALLOWED_LEAD_STATUSES = [
+  "New",
+  "Contacted",
+  "Preparing Documents",
+  "Submitted",
+  "Approved",
+  "KIV",
+  "Rejected",
+  "Accepted/Decline/Appeal",
+  "Accepted" // Added "Accepted" if you want to allow that value
+];
 
 /**
  * Helper: Format a number as MYR currency.
@@ -50,6 +65,40 @@ async function sendWhatsappMessageToAgent(recipientPhone, message) {
 }
 
 /**
+ * Helper: Validate if a lead status transition is allowed.
+ * For Admins, any allowed status is permitted.
+ * For Agents, they can update only their assigned leads and cannot update if the lead is already accepted.
+ *
+ * @param {string} currentStatus - The current status of the lead.
+ * @param {string} newStatus - The new status requested.
+ * @param {string} loggedInRole - The role of the logged-in user (e.g., 'Admin' or 'Agent').
+ * @param {number|string} assignedAgentId - The ID of the agent assigned to the lead.
+ * @param {number|string} loggedInAgentId - The ID of the logged-in agent (from JWT).
+ * @returns {boolean} True if the transition is allowed, false otherwise.
+ */
+function isValidTransition(currentStatus, newStatus, loggedInRole, assignedAgentId, loggedInAgentId) {
+  // Check that the newStatus is allowed.
+  if (!ALLOWED_LEAD_STATUSES.includes(newStatus)) {
+    return false;
+  }
+  // Normalize role to lowercase.
+  const role = loggedInRole ? loggedInRole.toLowerCase() : '';
+  // Admins can change status arbitrarily.
+  if (role === 'admin') {
+    return true;
+  }
+  // For Agents, ensure the lead is assigned to them.
+  if (role === 'agent' && String(assignedAgentId) === String(loggedInAgentId)) {
+    // Agents should not update a lead that is already accepted.
+    if (currentStatus === "Accepted" || currentStatus === "Accepted/Decline/Appeal") {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
  * POST /api/leads - Create a new lead and notify assigned agent via WhatsApp.
  */
 router.post('/', async (req, res) => {
@@ -83,8 +132,6 @@ router.post('/', async (req, res) => {
       const refAgent = await Agent.findOne({ where: { referral_code: referrer_code } });
       if (refAgent) {
         console.log('[DEBUG] Found agent for referral code:', refAgent.toJSON());
-
-        // If the referral code equals the default referral code, use the superadmin.
         if (refAgent.referral_code === process.env.DEFAULT_REFERRAL_CODE) {
           const superAdmin = await Agent.findOne({ where: { referral_code: process.env.DEFAULT_REFERRAL_CODE } });
           if (superAdmin) {
@@ -92,15 +139,11 @@ router.post('/', async (req, res) => {
             referrer_id = superAdmin.id;
             console.log('[DEBUG] Referral code is default. Using superadmin as assigned agent:', superAdmin.id);
           }
-        }
-        // If the agent's role is "referrer", assign to the parent's ID if available.
-        else if (refAgent.role && refAgent.role.toLowerCase() === 'referrer') {
+        } else if (refAgent.role && refAgent.role.toLowerCase() === 'referrer') {
           assigned_agent_id = refAgent.parent_referrer_id || refAgent.id;
           referrer_id = refAgent.id;
           console.log('[DEBUG] Agent is a referrer. Assigned agent ID set to:', assigned_agent_id);
-        }
-        // Otherwise, assume the referral code belongs to an agent.
-        else {
+        } else {
           assigned_agent_id = refAgent.id;
           referrer_id = refAgent.id;
           console.log('[DEBUG] Agent role is not referrer. Assigned agent ID set to:', assigned_agent_id);
@@ -137,22 +180,20 @@ router.post('/', async (req, res) => {
       yearly_savings,
       new_monthly_repayment,
       bankname,
-      assigned_agent_id, // From referral logic.
-      referrer_id,       // From referral logic.
+      assigned_agent_id,
+      referrer_id,
       source: 'whatsapp',
       status: 'New'
     });
 
     console.log('[DEBUG] New lead created:', newLead.toJSON());
 
-    // If an assigned agent exists, send a detailed WhatsApp message.
+    // Notify the assigned agent via WhatsApp, if available.
     if (assigned_agent_id) {
       try {
         const agent = await Agent.findByPk(assigned_agent_id);
         if (agent && agent.phone) {
-          const agentPhone = agent.phone; // Ensure this is in E.164 format.
-          
-          // Lookup referrer name if available.
+          const agentPhone = agent.phone;
           let referrerName = referrer_code;
           if (referrer_id) {
             const refAgent = await Agent.findByPk(referrer_id);
@@ -160,8 +201,6 @@ router.post('/', async (req, res) => {
               referrerName = refAgent.name;
             }
           }
-          
-          // Build a more detailed summary message for the agent.
           const summaryMessage = `
 🚨 New Lead Assigned 🚨
 
@@ -181,7 +220,6 @@ router.post('/', async (req, res) => {
 
 Referrer: ${referrer_code} (${referrerName})
           `.trim();
-          
           await sendWhatsappMessageToAgent(agentPhone, summaryMessage);
         } else {
           console.warn('[WARN] Assigned agent not found or missing phone for agent id:', assigned_agent_id);
@@ -216,9 +254,9 @@ router.get('/', async (req, res) => {
       return res.status(400).json({ error: 'Invalid pagination parameters' });
     }
 
-    // If using authentication, ensure that the logged-in agent accesses only their own leads.
-    const { id } = req.user || {};
-    if (agent_id && id && agent_id !== id) {
+    // For role-based filtering: if an agent is logged in, ensure they access only their own leads.
+    const { id: loggedInAgentId } = req.user || {};
+    if (agent_id && loggedInAgentId && agent_id !== loggedInAgentId) {
       return res.status(403).json({ error: 'Forbidden: You can only access your own leads.' });
     }
 
@@ -258,20 +296,29 @@ router.get('/', async (req, res) => {
 
 /**
  * PATCH /api/leads/:id - Update lead status or assign agent.
+ * This endpoint allows both Admins and Agents to update the status of a lead.
+ * Admins can update any lead; Agents can update only leads assigned to them.
  */
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, role, assigned_agent_id, loan_amount } = req.body;
+    const { status, assigned_agent_id, loan_amount } = req.body;
 
     const lead = await Lead.findByPk(id);
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' });
     }
 
-    const { id: loggedInAgentId } = req.user || {};
+    // Extract role and agent ID from JWT (req.user)
+    const { id: loggedInAgentId, role: loggedInRole } = req.user || {};
 
-    if (assigned_agent_id && role === 'Admin') {
+    // If logged in as Agent, they can only update their own leads.
+    if (loggedInRole === 'Agent' && String(lead.assigned_agent_id) !== String(loggedInAgentId)) {
+      return res.status(403).json({ error: 'Forbidden: You can only update your own leads.' });
+    }
+
+    // If assigned_agent_id is provided and the loggedInRole is Admin, update the assignment.
+    if (assigned_agent_id && loggedInRole === 'Admin') {
       const agent = await Agent.findByPk(assigned_agent_id);
       if (!agent) {
         return res.status(400).json({ error: 'Invalid agent ID' });
@@ -280,11 +327,11 @@ router.patch('/:id', async (req, res) => {
     }
 
     if (status) {
-      // Assume isValidTransition is defined elsewhere to validate status transitions.
+      // Validate the status transition using our helper.
       const canTransition = isValidTransition(
         lead.status,
         status,
-        role,
+        loggedInRole,
         lead.assigned_agent_id,
         loggedInAgentId
       );
@@ -293,6 +340,7 @@ router.patch('/:id', async (req, res) => {
       }
       lead.status = status;
 
+      // When a lead is accepted, calculate commissions.
       if (status === 'Accepted') {
         if (!loan_amount) {
           return res.status(400).json({ error: 'Loan amount is required for commissions.' });
@@ -320,7 +368,7 @@ router.patch('/:id', async (req, res) => {
           as: 'agent',
           attributes: ['id', 'name', 'phone', 'email']
         }
-      ]
+      ],
     });
 
     res.status(200).json(updatedLead);
@@ -329,5 +377,32 @@ router.patch('/:id', async (req, res) => {
     res.status(500).json({ error: 'Error updating lead', details: error.message });
   }
 });
+
+/**
+ * Helper function: Validate allowed lead status transitions.
+ * For Admins, any allowed status is fine.
+ * For Agents, ensure the lead is assigned to them and disallow update if lead is already accepted.
+ */
+function isValidTransition(currentStatus, newStatus, loggedInRole, assignedAgentId, loggedInAgentId) {
+  // Check that the newStatus is allowed.
+  if (!ALLOWED_LEAD_STATUSES.includes(newStatus)) {
+    return false;
+  }
+  // Normalize the role to lowercase.
+  const role = loggedInRole ? loggedInRole.toLowerCase() : '';
+  // Admins can update status arbitrarily.
+  if (role === 'admin') {
+    return true;
+  }
+  // For Agents, ensure the lead is assigned to them.
+  if (role === 'agent' && String(assignedAgentId) === String(loggedInAgentId)) {
+    // Agents cannot update a lead if it is already accepted.
+    if (currentStatus === "Accepted" || currentStatus === "Accepted/Decline/Appeal") {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
 
 module.exports = router;

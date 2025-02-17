@@ -37,6 +37,10 @@ Agent.initModel = (sequelize) => {
         type: DataTypes.STRING,
         allowNull: true,
         defaultValue: null,
+        unique: {
+          name: 'unique_email',
+          msg: 'This email is already in use.',
+        },
         validate: {
           isEmail: { msg: 'Invalid email address' },
         },
@@ -55,7 +59,7 @@ Agent.initModel = (sequelize) => {
       },
       status: {
         type: DataTypes.ENUM('Active', 'Inactive', 'Pending', 'Rejected'),
-        defaultValue: 'Pending',
+        defaultValue: 'Pending', // For self-registration; Admin endpoints can override to Active.
       },
       referral_code: {
         type: DataTypes.STRING,
@@ -114,12 +118,13 @@ Agent.initModel = (sequelize) => {
         { fields: ['status'] },
         { fields: ['referral_code'] },
         { fields: ['email'] },
+        { fields: ['role'] },
       ],
       hooks: {
         beforeCreate: async (agent) => {
           console.log('[DEBUG] Agent.beforeCreate Hook Triggered');
           try {
-            // Referral Code Generation
+            // Referral Code Generation: if not provided, generate a unique referral code.
             if (!agent.referral_code) {
               console.log('[DEBUG] Generating referral code');
               let isUnique = false;
@@ -138,7 +143,7 @@ Agent.initModel = (sequelize) => {
               }
             }
 
-            // Password Hashing
+            // Password Hashing: Only hash if password isn't already hashed.
             if (agent.password && !agent.password.startsWith('$2b$')) {
               console.log('[DEBUG] Hashing password in beforeCreate hook');
               agent.password = await bcrypt.hash(agent.password, 10);
@@ -152,13 +157,13 @@ Agent.initModel = (sequelize) => {
         beforeUpdate: async (agent) => {
           console.log('[DEBUG] Agent.beforeUpdate Hook Triggered');
           try {
-            // Prevent Referral Code Updates
+            // Prevent Referral Code Updates.
             if (agent.changed('referral_code')) {
               console.log('[ERROR] Referral code update attempted:', agent.referral_code);
               throw new Error('Referral code cannot be updated.');
             }
 
-            // Password Hashing
+            // Password Hashing: If password field has changed and is not already hashed.
             if (agent.changed('password') && !agent.password.startsWith('$2b$')) {
               console.log('[DEBUG] Hashing updated password in beforeUpdate hook');
               agent.password = await bcrypt.hash(agent.password, 10);
@@ -173,13 +178,12 @@ Agent.initModel = (sequelize) => {
     }
   );
 
-  // Return the initialized model
   return Agent;
 };
 
-// Optional: define .associate if you want Agent->Lead or something
 Agent.associate = (models) => {
-  // e.g. Agent.hasMany(models.Lead, { as: 'leads', foreignKey: 'assigned_agent_id' });
+  // For example: an agent can have many leads assigned to them.
+  // Agent.hasMany(models.Lead, { as: 'leads', foreignKey: 'assigned_agent_id' });
 };
 
 module.exports = Agent;
